@@ -2,7 +2,7 @@ RavIron - OpenStack Ironic Power Control for Ravello
 ====================================================
 
 Raviron allows OpenStack Ironic to control power for VMs running in Ravello
-Systems.  It is designed to be used with the ssh/virsh power driver that is
+Systems. It is designed to be used with the ssh/virsh power driver that is
 already in upstream Ironic.
 
 The benefits of using the existing ssh driver is that no changes are required
@@ -46,6 +46,22 @@ controlling the VMs in a single Ravello application::
 
 The output key needs to be copied to the machine running Ironic so that it may
 access the SSH proxy machine.
+
+Testing RavIron
+---------------
+
+You can test raviron by running a "virsh" comments via a provisioned SSH key::
+
+  $ ssh -i ~/.ssh/id_raviron proxy.host virsh list --all
+  vm0
+  vm1
+
+Note that only the very small set of virsh commands that are used by Ironic are
+supported, and furthermore the output is tailored to what Ironic expects.
+RavIron is not a general purpose virsh wrapper for Ravello.
+
+For supported commands and the output format, see the Ironic source code here:
+https://github.com/openstack/ironic/blob/2015.1.0/ironic/drivers/modules/ssh.py#L153
 
 Setting up Ironic
 -----------------

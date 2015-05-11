@@ -62,9 +62,9 @@ _virsh_commands = [
     ('start', re.compile('virsh start ([^ ]+)')),
     ('stop', re.compile('virsh destroy ([^ ]+)')),
     ('reboot', re.compile('virsh reset ([^ ]+)')),
-    ('list_all', re.compile('list --all.*tail')),
+    ('get_node_macs', re.compile('virsh dumpxml ([^ ]+) .*mac')),
     ('list_running', re.compile('list --all.*running')),
-    ('get_node_macs', re.compile('virsh dumpxml ([^ ]+) .*mac'))
+    ('list_all', re.compile('list --all'))
 ]
 
 
