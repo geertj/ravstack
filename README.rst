@@ -1,5 +1,5 @@
-Raviron - Ironic Power Control for Ravello
-==========================================
+RavIron - OpenStack Ironic Power Control for Ravello
+====================================================
 
 Raviron allows OpenStack Ironic to control power for VMs running in Ravello
 Systems.  It is designed to be used with the ssh/virsh power driver that is
@@ -14,7 +14,7 @@ in corresponding organization. This may not be suitable for all deployments
 that only allows access to a single application. The drawback is that you need
 to run a separate ssh server somewhere.
 
-Installing Raviron
+Installing RavIron
 ------------------
 
 Raviron needs to be installed in the following way:
@@ -24,7 +24,6 @@ Raviron needs to be installed in the following way:
    account below but the name is not important.
  * It is highly recommended you run raviron from a vitualenv.
 
-
 Setting up the environment::
 
   $ sudo useradd raviron
@@ -33,7 +32,6 @@ Setting up the environment::
   [raviron] $ virtualenv venv  # "pyvenv" for Python 3.x
   [raviron] $ . venv/bin/activate
   (venv) [raviron] $ pip install raviron
-
 
 Creating Keys
 -------------
