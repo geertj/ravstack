@@ -45,7 +45,7 @@ def get_ssh_environ():
         meta = get_ravello_metadata()
         if meta is None:
             raise RuntimeError('missing environment variable: $RAVELLO_APPLICATION')
-        app = meta['application']
+        app = meta['appName']
     env['RAVELLO_APPLICATION'] = app
     return env
 
