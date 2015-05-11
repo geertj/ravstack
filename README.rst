@@ -19,10 +19,10 @@ Installing RavIron
 
 Raviron needs to be installed in the following way:
 
- * You need to run raviron from a Linux system with a recent version of OpenSSH.
- * It needs to be run from a dedicated user account. We use the "raviron"
-   account below but the name is not important.
- * It is highly recommended you run raviron from a vitualenv.
+* You need to run raviron from a Linux system with a recent version of OpenSSH.
+* It needs to be run from a dedicated user account. We use the "raviron"
+  account below but the name is not important.
+* It is highly recommended you run raviron from a vitualenv.
 
 Setting up the environment::
 
