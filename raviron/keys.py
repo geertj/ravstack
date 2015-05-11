@@ -111,6 +111,7 @@ def _main():
     # public key name. We use the public key as creating the private key will
     # make ssh-keygen ask for a confirmation to overwrite it.
     sshdir = os.path.join(util.get_homedir(), '.ssh')
+    util.create_directory(sshdir, 0o700)
     keytemplate = 'id_raviron_{:04}.pub'
     seqno, pubkey = util.create_unique_file_seqno(sshdir, keytemplate)
 

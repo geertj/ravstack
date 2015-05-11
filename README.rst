@@ -30,8 +30,6 @@ Setting up the environment::
   $ sudo useradd raviron
   $ sudo -u raviron bash
   [raviron] $ cd /home/raviron
-  [raviron] $ mkdir .ssh
-  [raviron] $ chmod 700 .ssh
   [raviron] $ virtualenv venv  # "pyvenv" for Python 3.x
   [raviron] $ . venv/bin/activate
   (venv) [raviron] $ pip install raviron
