@@ -41,13 +41,10 @@ Creating Keys
 Once Raviron is installed, you need to create ssh keys. Each ssh key will allow
 controlling the VMs in a single Ravello application::
 
-  (venv) [raviron] $ create-key 
-  Enter Ravello API username: user@example.com
-  Enter Ravello API password: ********
-  Checking credentials: OK
-  Enter Ravello applciation ID (optional): 12345
-  Generating key..
-  Stored key as: ~/.ssh/id_rsa-0001
+  (venv) [raviron] $ create-key user@example.com MyApp
+  Private key created as: ~/.ssh/id_raviron_0001
+  Using API proxy: ~/bin/raviron-proxy-0001.sh
+  Key is constrained to application: MyApp
 
 The output key needs to be copied to the machine running Ironic so that it may
 access the SSH proxy machine.

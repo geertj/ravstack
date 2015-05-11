@@ -9,7 +9,7 @@
 """Create raviron SSH access keys.
 
 Usage:
-  create-key [-u <username>] [-d] <application>
+  create-key [-d] <username> [<application>]
 
 The create-key commands creates a new public key that allows the user to
 perform certain power control and management operations on VMs in a Ravello
@@ -19,7 +19,6 @@ The key is intended to be used to as part of an OpenStack Ironic
 configuration, using the "ssh" power driver
 
 Options:
-  -u, --username    The Ravello API username.
   -d, --debug       Enable debugging mode.
 
 The Ravello API password will be read from the $RAVELLO_PASSWORD environment
@@ -102,9 +101,12 @@ def _main():
     # Check Ravello API credentials.
     client = RavelloClient()
     client.login(args['<username>'], args['<password>'])
-    app = client.get_applications(filter={'name': args['<application>']})
-    if app is None:
-        sys.stdout.write('Warning: app {} does not exist.\n'.format(args['<application>']))
+    if args['<application>']:
+        app = client.get_applications(filter={'name': args['<application>']})
+        if app is None:
+            sys.stdout.write('Warning: app {} does not exist.\n'.format(args['<application>']))
+    else:
+        args['<application>'] = ''
     client.close()
 
     # Find out the sequence number for this new key by creating a new unique
@@ -127,9 +129,13 @@ def _main():
     add_to_authorized_keys(pubkey, proxyname)
 
     privbase = os.path.split(privkey)[1]
-    sys.stdout.write('Private key created as: ~/.ssh/{}\n'.format(privbase))
+    print('Private key created as: ~/.ssh/{}'.format(privbase))
     proxybase = os.path.split(proxyname)[1]
-    sys.stdout.write('Using API proxy: ~/bin/{}\n'.format(proxybase))
+    print('Using API proxy: ~/bin/{}'.format(proxybase))
+    if args['<application>']:
+        print('Key is constrained to application: {}'.format(args['<application>']))
+    else:
+        print('Key is constrained to the app that runs the SSH proxy host.')
 
 
 def main():
