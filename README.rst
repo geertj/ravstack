@@ -29,9 +29,9 @@ Setting up the environment::
   $ sudo useradd raviron
   $ sudo -u raviron bash
   [raviron] $ cd /home/raviron
-  [raviron] $ virtualenv venv  # "pyvenv" for Python 3.x
+  [raviron] $ pyvenv venv  # "virtualenv" for Python 2.7
   [raviron] $ . venv/bin/activate
-  (venv) [raviron] $ pip install raviron
+  (venv) [raviron] $ pip install git+https://github.com/geertj/raviron
 
 Creating Keys
 -------------
