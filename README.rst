@@ -5,15 +5,6 @@ Raviron allows OpenStack Ironic to control power for VMs running in Ravello
 Systems. It is designed to be used with the ssh/virsh power driver that is
 already in upstream Ironic.
 
-The benefits of using the existing ssh driver is that no changes are required
-to upstream Ironic. It also allows for finer grained access control. Ravello
-does not currently allow security delegation for individual application, so a
-set of Ravello API credentials always allow access to all applications running
-in corresponding organization. This may not be suitable for all deployments
-(e.g. virtual classrooms). By using ssh we can set up a constrained ssh key
-that only allows access to a single application. The drawback is that you need
-to run a separate ssh server somewhere.
-
 Installing RavIron
 ------------------
 
