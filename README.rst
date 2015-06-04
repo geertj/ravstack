@@ -11,9 +11,9 @@ Installing RavIron
 Raviron needs to be installed in the following way:
 
 * You need to run raviron from a Linux system with a recent version of OpenSSH.
-* It needs to be run from a dedicated user account. We use the "raviron"
-  account below but the name is not important.
-* It is highly recommended you run raviron from a vitualenv.
+* It needs to be run from a dedicated user account. The "raviron account is
+  used below but the name is not important.
+* It is highly recommended that you run raviron from a vitualenv.
 
 Setting up the environment::
 
@@ -35,8 +35,8 @@ controlling the VMs in a single Ravello application::
   Using API proxy: ~/bin/raviron-proxy-0001.sh
   Key is constrained to application: MyApp
 
-The output key needs to be copied to the machine running Ironic so that it may
-access the SSH proxy machine.
+The generated private key file needs to be copied to the machine running Ironic so
+that it may access the SSH proxy machine.
 
 Testing RavIron
 ---------------
