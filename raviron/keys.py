@@ -89,6 +89,7 @@ def add_to_authorized_keys(pubkey, command):
     authfile = os.path.join(sshdir, 'authorized_keys')
     with open(authfile, 'a') as fout:
         fout.write(authentry)
+    os.chmod(authfile, 0o600)
 
 
 def _main():
