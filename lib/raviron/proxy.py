@@ -69,7 +69,9 @@ _virsh_commands = [
     ('reboot', re.compile('reset ([^ ]+)')),
     ('get_node_macs', re.compile('dumpxml ([^ ]+) .*mac')),
     ('list_running', re.compile('list --all.*running')),
-    ('list_all', re.compile('list --all'))
+    ('list_all', re.compile('list --all')),
+    ('get_boot_device', re.compile('dumpxml ([^ ]+) .*boot')),
+    ('set_boot_device', re.compile(r'boot dev=\\"([^\\]+)\\".* edit ([^ ]+)')),
 ]
 
 
@@ -173,12 +175,30 @@ def do_list_running(env, client):
 
 
 def do_get_node_macs(env, client, nodename):
-    """Return the Macs for all VMs, output to standard out."""
+    """Return the macs for *nodename*, output to standard out."""
     app, vm = get_app_vm_fail(env, client, nodename)
     for conn in vm.get('networkConnections', []):
         mac = conn.get('device', {}).get('mac')
         if mac:
             sys.stdout.write('{}\n'.format(mac.replace(':', '')))
+
+
+def do_get_boot_device(env, client, nodename):
+    """Return the boot dervice for *nodename*."""
+    app, vm = get_app_vm_fail(env, client, nodename)
+    return 'hd' if vm['bootOrder'][0] == 'DISK' else 'network'
+
+
+def do_set_boot_device(env, client, nodename, device):
+    """Set the boot device for *nodename* to *device*."""
+    app, vm = get_app_vm_fail(env, client, nodename)
+    if device == 'hd':
+        vm['bootOrder'] = ['DISK', 'CDROM']
+    elif device == 'network':
+        vm['bootOrder'] = ['CDROM', 'DISK']
+    else:
+        raise RuntimeError('Illegal boot device: {}'.format(device))
+    client.update_application(app)
 
 
 def _main():
@@ -205,6 +225,10 @@ def _main():
         do_list_running(env, client, )
     elif cmdline[0] == 'get_node_macs':
         do_get_node_macs(env, client, cmdline[1])
+    elif cmdline[0] == 'get_boot_device':
+        do_get_boot_device(env, client, cmdline[1])
+    elif cmdline[0] == 'set_boot_device':
+        do_set_boot_device(env, client, cmdline[2], cmdline[1])
     else:
         raise AssertionError('unknown command: {}'.format(cmdline[0]))
 
