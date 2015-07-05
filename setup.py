@@ -8,6 +8,7 @@
 
 from __future__ import absolute_import, print_function
 
+import os
 from setuptools import setup
 
 
@@ -29,8 +30,21 @@ version_info = {
     ]
 }
 
+topdir, _ = os.path.split(os.path.abspath(__file__))
+
+
+def get_requirements():
+    """Parse a requirements.txt file and return as a list."""
+    lines = []
+    with open(os.path.join(topdir, 'requirements.txt')) as fin:
+        for line in fin:
+            lines.append(line.rstrip())
+    return lines
+
+
 setup(
     packages=['raviron'],
+    install_requires=get_requirements(),
     entry_points={
         'console_scripts': [
             'create-key = raviron.keys:main',
