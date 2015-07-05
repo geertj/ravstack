@@ -63,10 +63,10 @@ def get_ravello_client(env):
 # https://github.com/openstack/ironic/blob/master/ironic/drivers/modules/ssh.py#L151
 
 _virsh_commands = [
-    ('start', re.compile('virsh start ([^ ]+)')),
-    ('stop', re.compile('virsh destroy ([^ ]+)')),
-    ('reboot', re.compile('virsh reset ([^ ]+)')),
-    ('get_node_macs', re.compile('virsh dumpxml ([^ ]+) .*mac')),
+    ('start', re.compile('start ([^ ]+)')),
+    ('stop', re.compile('destroy ([^ ]+)')),
+    ('reboot', re.compile('reset ([^ ]+)')),
+    ('get_node_macs', re.compile('dumpxml ([^ ]+) .*mac')),
     ('list_running', re.compile('list --all.*running')),
     ('list_all', re.compile('list --all'))
 ]
