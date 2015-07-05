@@ -161,10 +161,11 @@ def _main():
     log.debug('New request, command = {}'.format(os.environ['SSH_ORIGINAL_COMMAND']))
 
     env = get_ssh_environ()
-    client = get_ravello_client(env)
-    cmdline = parse_virsh_command_line(env)
 
+    cmdline = parse_virsh_command_line(env)
     log.debug('Parsed command = {!r}'.format(cmdline))
+
+    client = get_ravello_client(env)
 
     if cmdline[0] == 'start':
         do_start(env, client, cmdline[1])
@@ -190,6 +191,8 @@ def main():
     try:
         _main()
     except Exception as e:
+        log = util.get_logger()
+        log.error('Uncaught exception:', exc_info=True)
         if util.get_debug():
             raise
         sys.stdout.write('Error: {!s}\n'.format(e))
