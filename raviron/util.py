@@ -9,11 +9,8 @@
 from __future__ import absolute_import, print_function
 
 import os
-import sys
 import pwd
 import errno
-import stat
-import getpass
 import functools
 import logging
 import re
@@ -32,7 +29,7 @@ _memodata = {}
 
 def memoize(func):
     """Memoizes a function.
-    
+
     Note: ignores function arguments when memoizing.
     """
     @functools.wraps(func)
@@ -57,7 +54,7 @@ def get_homedir():
 def create_directory(dirname, mode=0o755):
     """Create a new directory."""
     try:
-        st = os.mkdir(dirname, mode)
+        os.mkdir(dirname, mode)
     except OSError as e:
         if e.errno != errno.EEXIST:
             raise

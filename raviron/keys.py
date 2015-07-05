@@ -33,7 +33,6 @@ import docopt
 import getpass
 import textwrap
 import subprocess
-import six
 
 from . import util
 from six.moves import shlex_quote
