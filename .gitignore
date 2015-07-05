@@ -1,10 +1,11 @@
 build/
 dist/
+work/
+trash/
 *.egg-info
 *.pyc
 *.pyo
 .*.swp
 .*.swo
 *~
-__pycache__
-header
+.tox
