@@ -178,9 +178,11 @@ def do_get_node_macs(env, client, nodename):
     """Return the macs for *nodename*, output to standard out."""
     app, vm = get_app_vm_fail(env, client, nodename)
     for conn in vm.get('networkConnections', []):
-        mac = conn.get('device', {}).get('mac')
-        if mac:
-            sys.stdout.write('{}\n'.format(mac.replace(':', '')))
+        device = conn.get('device', {})
+        mac = device.get('mac')
+        if mac is None:
+            mac = device.get('generatedMac')
+        sys.stdout.write('{}\n'.format(mac.replace(':', '')))
 
 
 def do_get_boot_device(env, client, nodename):
