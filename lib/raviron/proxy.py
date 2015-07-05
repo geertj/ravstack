@@ -12,6 +12,7 @@ import re
 import os
 import sys
 import json
+import time
 
 from ravello_sdk import RavelloClient
 from . import util
@@ -111,15 +112,40 @@ def get_app_vm_fail(env, client, nodename):
     raise RuntimeError('VM {} not found in application {}'.format(nodename, app['name']))
 
 
+def _wait_for_status(env, client, nodename, state, timeout=600):
+    """Wait until *nodename* is in *state*."""
+    end_time = time.time() + timeout
+    log = util.get_logger()
+    while end_time > time.time():
+        log.debug('_wait_for_status(): waiting for {}'.format(state))
+        app, vm = get_app_vm_fail(env, client, nodename)
+        log.debug('_wait_for_status(): state = {}'.format(vm['state']))
+        if vm['state'] == state:
+            break
+        time.sleep(10)
+
+
 def do_start(env, client, nodename):
     """Start the VM with name *nodename*."""
     app, vm = get_app_vm_fail(env, client, nodename)
+    state = vm['state']
+    if state in ('STARTED', 'STARTING'):
+        return
+    if state == 'STOPPING':
+        # Need to wait until it is in STOPPED.
+        _wait_for_status(env, client, nodename, 'STOPPED')
     client.start_vm(app, vm)
 
 
 def do_stop(env, client, nodename):
     """Stop the VM with name *nodename*."""
     app, vm = get_app_vm_fail(env, client, nodename)
+    state = vm['state']
+    if state in ('STOPPED', 'STOPPING'):
+        return
+    if state == 'STARTING':
+        # Need to wait until it is in STARTED.
+        _wait_for_status(env, client, nodename, 'STARTED')
     client.stop_vm(app, vm)
 
 
