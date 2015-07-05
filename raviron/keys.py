@@ -60,9 +60,22 @@ def create_private_key(args, privkey):
 
 def create_proxy(args, fname):
     """Create a proxy wrapper."""
+    # Running in a software collection?
+    enable_scls = []
+    scls = os.environ.get('X_SCLS', '')
+    for scl in scls.split():
+        with open('/etc/scl/conf/{}'.format(scl)) as fin:
+            prefix = fin.readline().rstrip()
+        enable_scls.append('. {}/{}/enable'.format(prefix, scl))
+    if scls:
+        enable_scls.append('X_SCLS={}'.format(shlex_quote(scls)))
+        enable_scls.append('export X_SCLS')
+    else:
+        enable_scls.append('# No software collections enabled.')
+    enable_scls = '\n'.join(enable_scls)
     # If running in a venv, source the same one.
     venv = os.environ.get('VIRTUAL_ENV')
-    source_venv = '. {}/bin/activate'.format(venv) if venv else ''
+    enable_venv = '. {}/bin/activate'.format(venv) if venv else '# No virtualenv enabled.'
     contents = textwrap.dedent("""\
             #!/bin/sh
             RAVELLO_USERNAME={}
@@ -70,11 +83,12 @@ def create_proxy(args, fname):
             RAVELLO_APPLICATION={}
             export RAVELLO_USERNAME RAVELLO_PASSWORD RAVELLO_APPLICATION
             {}
+            {}
             python -mraviron.proxy
             """).format(shlex_quote(args['<username>']),
                         shlex_quote(args['<password>']),
                         shlex_quote(args['<application>']),
-                        source_venv)
+                        enable_scls, enable_venv)
     with open(fname, 'w') as fout:
         fout.write(contents)
     os.chmod(fname, 0o700)
