@@ -58,6 +58,10 @@ def get_ravello_client(env):
     return client
 
 
+# These are the virsh commands used by the ssh power driver in Ironic.
+# They need to match and be kept up to date with the following file:
+# https://github.com/openstack/ironic/blob/master/ironic/drivers/modules/ssh.py#L151
+
 _virsh_commands = [
     ('start', re.compile('virsh start ([^ ]+)')),
     ('stop', re.compile('virsh destroy ([^ ]+)')),
