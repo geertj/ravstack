@@ -63,19 +63,6 @@ def create_directory(dirname, mode=0o755):
             raise
 
 
-def make_executable(fname):
-    """Make a file executable for everyone that has read access to it."""
-    st = os.stat(fname)
-    new_mode = st.st_mode & 0o777
-    if new_mode & stat.S_IRUSR:
-        new_mode |= stat.S_IXUSR
-    if new_mode & stat.S_IRGRP:
-        new_mode |= stat.S_IXGRP
-    if new_mode & stat.S_IROTH:
-        new_mode |= stat.S_IXOTH
-    os.chmod(fname, new_mode)
-
-
 _re_field = re.compile(r'\{[^}]+\}')
 
 def create_unique_file_seqno(dirname, template, mode=0o755):

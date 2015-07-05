@@ -54,6 +54,8 @@ def create_private_key(args, privkey):
     """Create a new private key file."""
     keycomment = 'raviron/{}/{}'.format(args['<username>'], args['<application>'])
     subprocess.check_call(['ssh-keygen', '-f', privkey, '-N', "", '-q', '-C', keycomment])
+    os.chmod(privkey, 0o600)
+    os.chmod(privkey + '.pub', 0o644)
 
 
 def create_proxy(args, fname):
@@ -75,7 +77,7 @@ def create_proxy(args, fname):
                         source_venv)
     with open(fname, 'w') as fout:
         fout.write(contents)
-    util.make_executable(fname)
+    os.chmod(fname, 0o700)
 
 
 def add_to_authorized_keys(pubkey, command):
