@@ -2,4 +2,4 @@ include setup.py tasks.py
 include setup.cfg tox.ini
 include AUTHORS LICENSE README.rst MANIFEST.in
 include *requirements.txt
-include raviron/*.py
+include lib/raviron/*.py

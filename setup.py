@@ -45,6 +45,7 @@ def get_requirements():
 if __name__ == '__main__':
     setup(
         packages=['raviron'],
+        package_dir={'': 'lib'},
         install_requires=get_requirements(),
         entry_points={
             'console_scripts': [
