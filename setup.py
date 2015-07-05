@@ -42,11 +42,12 @@ def get_requirements():
     return lines
 
 
-setup(
-    packages=['raviron'],
-    install_requires=get_requirements(),
-    entry_points={
-        'console_scripts': [
-            'create-key = raviron.keys:main',
-            'proxy-cmd = raviron.proxy:main']},
-    **version_info)
+if __name__ == '__main__':
+    setup(
+        packages=['raviron'],
+        install_requires=get_requirements(),
+        entry_points={
+            'console_scripts': [
+                'create-key = raviron.keys:main',
+                'proxy-cmd = raviron.proxy:main']},
+        **version_info)
