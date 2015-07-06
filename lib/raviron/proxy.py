@@ -102,29 +102,39 @@ def get_app_fail(env, client):
     return client.get_application(apps[0]['id'])
 
 
+def _get_vm(app, nodename):
+    """Return the VM *nodename* from *app*."""
+    for vm in app.get('deployment', {}).get('vms', []):
+        if vm['name'] == nodename:
+            return vm
+    raise RuntimeError('App {} does not have a VM {}'.format(app['name'], nodename))
+
+
 def get_app_vm_fail(env, client, nodename):
     """Return the application and VM from $RAVELLO_APPLICATION and *nodename*.
 
     An exception is raised if the application or the VM does not exist.
     """
     app = get_app_fail(env, client)
-    for vm in app.get('deployment', {}).get('vms', []):
-        if vm['name'] == nodename:
-            return app, vm
-    raise RuntimeError('VM {} not found in application {}'.format(nodename, app['name']))
+    vm = _get_vm(app, nodename)
+    return app, vm
 
 
 def _wait_for_status(env, client, nodename, state, timeout=600):
     """Wait until *nodename* is in *state*."""
-    end_time = time.time() + timeout
+    inverse = state.startswith('!')
+    wait_state = state.lstrip('!')
     log = util.get_logger()
+    end_time = time.time() + timeout
     while end_time > time.time():
         log.debug('_wait_for_status(): waiting for {}'.format(state))
         app, vm = get_app_vm_fail(env, client, nodename)
         log.debug('_wait_for_status(): state = {}'.format(vm['state']))
-        if vm['state'] == state:
+        if not inverse and vm['state'] == wait_state or \
+                inverse and vm['state'] != wait_state:
             break
         time.sleep(10)
+    raise RuntimeError('VM {} timeout waiting for {}'.format(nodename, state))
 
 
 def do_start(env, client, nodename):
@@ -134,9 +144,13 @@ def do_start(env, client, nodename):
     if state in ('STARTED', 'STARTING'):
         return
     if state == 'STOPPING':
-        # Need to wait until it is in STOPPED.
+        # Need to wait until it is in STOPPED, otherwise it cannot be started.
         _wait_for_status(env, client, nodename, 'STOPPED')
     client.start_vm(app, vm)
+    # Wait for STARTING, and then !STARTING. This is more reliable than waiting
+    # for STARTED, as someone else could have stopped in the mean time.
+    _wait_for_status(env, client, nodename, 'STARTING')
+    _wait_for_status(env, client, nodename, '!STARTING')
 
 
 def do_stop(env, client, nodename):
@@ -146,9 +160,10 @@ def do_stop(env, client, nodename):
     if state in ('STOPPED', 'STOPPING'):
         return
     if state == 'STARTING':
-        # Need to wait until it is in STARTED.
         _wait_for_status(env, client, nodename, 'STARTED')
     client.stop_vm(app, vm)
+    _wait_for_status(env, client, nodename, 'STOPPING')
+    _wait_for_status(env, client, nodename, '!STOPPING')
 
 
 def do_reboot(env, client, nodename):
@@ -185,22 +200,55 @@ def do_get_node_macs(env, client, nodename):
         sys.stdout.write('{}\n'.format(mac.replace(':', '')))
 
 
+def _get_disk(vm):
+    """Return the hard drive for *vm*."""
+    for drive in vm.get('hardDrives', []):
+        if drive['type'] == 'DISK':
+            return drive
+    raise RuntimeError('VM {} does not have a DISK'.format(vm['name']))
+
+
 def do_get_boot_device(env, client, nodename):
     """Return the boot dervice for *nodename*."""
     app, vm = get_app_vm_fail(env, client, nodename)
-    return 'hd' if vm['bootOrder'][0] == 'DISK' else 'network'
+    drive = _get_disk(vm)
+    return 'hd' if drive.get('boot') else 'network'
+
+
+def _retry_on_conflict(env, client, func, timeout=600, delay=10):
+    """Retry a function in case it raises a 409 Conflict."""
+    log = util.get_logger()
+    end_time = time.time() + timeout
+    while end_time > time.time():
+        try:
+            func()
+        except Exception as e:
+            if not hasattr(e, 'response') or e.response.status_code != 409:
+                raise
+            log.debug('_retry_on_conflict(): retrying conflict')
+        time.sleep(delay)
 
 
 def do_set_boot_device(env, client, nodename, device):
     """Set the boot device for *nodename* to *device*."""
     app, vm = get_app_vm_fail(env, client, nodename)
-    if device == 'hd':
-        vm['bootOrder'] = ['DISK', 'CDROM']
-    elif device == 'network':
-        vm['bootOrder'] = ['CDROM', 'DISK']
-    else:
-        raise RuntimeError('Illegal boot device: {}'.format(device))
-    client.update_application(app)
+    appid = app['id']
+    # We need to reload and retry saving back the application as there's
+    # nothing preventing concurrent modifications. Fortunately Ravello detects
+    # this using a "version" key that is part of the app. This also explains wy
+    # we reload the app on every iteration below.
+    def set_boot_device():
+        app = client.get_application(appid)
+        vm = _get_vm(app, nodename)
+        drive = _get_disk(vm)
+        drive['boot'] = bool(device == 'hd')
+        client.update_application(app)
+    _retry_on_conflict(env, set_boot_device, 60, 1)
+    # Same for publish changes. Here we wait longer because we cannot publish
+    # updates if there's a VM in a transient state (STARTING / STOPPING).
+    def publish_updates():
+        client.publish_application_updates(appid)
+    _retry_on_conflict(env, publish_updates, 600, 10)
 
 
 def _main():
