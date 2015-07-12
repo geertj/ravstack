@@ -137,6 +137,25 @@ def _wait_for_status(env, client, nodename, state, timeout=1200):
     raise RuntimeError('VM {} timeout {:.0f}s waiting for {}'.format(nodename, wait_time, state))
 
 
+def _retry_operation(func, timeout=60, delay=2):
+    """Retry an operation on various 4xx errors."""
+    log = util.get_logger()
+    end_time = time.time() + timeout
+    while end_time > time.time():
+        try:
+            func()
+        except Exception as e:
+            if not hasattr(e, 'response'):
+                raise
+            status_code = e.response.status_code
+            if status_code not in (400, 403, 409):
+                raise
+            log.warning('_retry_operation(): retry on status {}'.format(status_code))
+        else:
+            break
+        time.sleep(delay)
+
+
 def do_start(env, client, nodename):
     """Start the VM with name *nodename*."""
     app, vm = get_app_vm_fail(env, client, nodename)
@@ -146,9 +165,7 @@ def do_start(env, client, nodename):
     if state == 'STOPPING':
         # Need to wait until it is in STOPPED, otherwise it cannot be started.
         _wait_for_status(env, client, nodename, 'STOPPED')
-    client.start_vm(app, vm)
-    # Ironic should prevent concurrent power actions until we are in STARTED.
-    #_wait_for_status(env, client, nodename, 'STARTED')
+    _retry_operation(lambda: client.start_vm(app, vm))
 
 
 def do_stop(env, client, nodename):
@@ -159,8 +176,7 @@ def do_stop(env, client, nodename):
         return
     if state == 'STARTING':
         _wait_for_status(env, client, nodename, 'STARTED')
-    client.stop_vm(app, vm)
-    #_wait_for_status(env, client, nodename, 'STOPPED')
+    _retry_operation(lambda: client.stop_vm(app, vm))
 
 
 def do_reboot(env, client, nodename):
@@ -212,33 +228,14 @@ def do_get_boot_device(env, client, nodename):
     return 'hd' if drive.get('boot') else 'network'
 
 
-def _retry_on_conflict(env, client, func, timeout=600, delay=10):
-    """Retry a function in case it raises a 409 Conflict."""
-    log = util.get_logger()
-    end_time = time.time() + timeout
-    while end_time > time.time():
-        try:
-            func()
-        except Exception as e:
-            if not hasattr(e, 'response'):
-                raise
-            status_code = e.response.status_code
-            if status_code not in (403, 409):
-                raise
-            log.debug('_retry_on_conflict(): retry status {}'.format(status_code))
-        else:
-            break
-        time.sleep(delay)
-
-
 def do_set_boot_device(env, client, nodename, device):
     """Set the boot device for *nodename* to *device*."""
     app, _ = get_app_vm_fail(env, client, nodename)
     appid = app['id']
-    # We need to reload and retry saving back the application as there's
-    # nothing preventing concurrent modifications. Fortunately Ravello detects
-    # this using a "version" key that is part of the app. This also explains why
-    # we reload the app on every iteration below.
+    # The locking in Ironic is per VM, not per application. So there will be
+    # concurrent calls to set the boot device for mutiple VMs.
+    # Fortunately Ravello concurrent modifications by including a "version"
+    # key in the application.
     # Due to a bug in Ravello, the "bootOrder" property is ignored. As a
     # workaround we toggle the "boot" flag on the drive.
     def set_boot_device():
@@ -247,9 +244,8 @@ def do_set_boot_device(env, client, nodename, device):
         drive = _get_disk(vm)
         drive['boot'] = bool(device == 'hd')
         client.update_application(app)
-    _retry_on_conflict(env, client, set_boot_device, 60, 2)
-    # Should be able to publish updates even if VMs are in a transient state.
-    client.publish_application_updates(appid)
+    _retry_operation(set_boot_device)
+    _retry_operation(lambda: client.publish_application_updates(appid))
 
 
 def _main():
