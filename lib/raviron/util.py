@@ -100,7 +100,10 @@ def setup_logging():
     logger.addHandler(handler)
     template = '%(asctime)s %(levelname)s [%(name)s] %(message)s'
     handler.setFormatter(logging.Formatter(template))
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG if get_debug() else logging.INFO)
+    import urllib3
+    urllib3.disable_warnings()
+
 
 def get_logger(context=''):
     """Return the application logger."""

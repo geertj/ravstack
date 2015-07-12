@@ -102,9 +102,9 @@ def get_app_fail(env, client):
     return client.get_application(apps[0]['id'])
 
 
-def _get_vm(app, nodename):
+def _get_vm(app, nodename, scope='deployment'):
     """Return the VM *nodename* from *app*."""
-    for vm in app.get('deployment', {}).get('vms', []):
+    for vm in app.get(scope, {}).get('vms', []):
         if vm['name'] == nodename:
             return vm
     raise RuntimeError('App {} does not have a VM {}'.format(app['name'], nodename))
@@ -120,21 +120,21 @@ def get_app_vm_fail(env, client, nodename):
     return app, vm
 
 
-def _wait_for_status(env, client, nodename, state, timeout=600):
+def _wait_for_status(env, client, nodename, state, timeout=1200):
     """Wait until *nodename* is in *state*."""
-    inverse = state.startswith('!')
-    wait_state = state.lstrip('!')
     log = util.get_logger()
-    end_time = time.time() + timeout
+    start_time = time.time()
+    end_time = start_time + timeout
     while end_time > time.time():
-        log.debug('_wait_for_status(): waiting for {}'.format(state))
+        wait_time = time.time() - start_time
+        log.debug('_wait_for_status(): waiting for {} ({:.0f}s)'.format(state, wait_time))
         app, vm = get_app_vm_fail(env, client, nodename)
-        log.debug('_wait_for_status(): state = {}'.format(vm['state']))
-        if not inverse and vm['state'] == wait_state or \
-                inverse and vm['state'] != wait_state:
+        log.debug('_wait_for_status(): current state {}'.format(vm['state']))
+        if vm['state'] == state:
             break
         time.sleep(10)
-    raise RuntimeError('VM {} timeout waiting for {}'.format(nodename, state))
+    wait_time = time.time() - start_time
+    raise RuntimeError('VM {} timeout {:.0f}s waiting for {}'.format(nodename, wait_time, state))
 
 
 def do_start(env, client, nodename):
@@ -147,10 +147,8 @@ def do_start(env, client, nodename):
         # Need to wait until it is in STOPPED, otherwise it cannot be started.
         _wait_for_status(env, client, nodename, 'STOPPED')
     client.start_vm(app, vm)
-    # Wait for STARTING, and then !STARTING. This is more reliable than waiting
-    # for STARTED, as someone else could have stopped in the mean time.
-    _wait_for_status(env, client, nodename, 'STARTING')
-    _wait_for_status(env, client, nodename, '!STARTING')
+    # Ironic should prevent concurrent power actions until we are in STARTED.
+    #_wait_for_status(env, client, nodename, 'STARTED')
 
 
 def do_stop(env, client, nodename):
@@ -162,8 +160,7 @@ def do_stop(env, client, nodename):
     if state == 'STARTING':
         _wait_for_status(env, client, nodename, 'STARTED')
     client.stop_vm(app, vm)
-    _wait_for_status(env, client, nodename, 'STOPPING')
-    _wait_for_status(env, client, nodename, '!STOPPING')
+    #_wait_for_status(env, client, nodename, 'STOPPED')
 
 
 def do_reboot(env, client, nodename):
@@ -223,32 +220,36 @@ def _retry_on_conflict(env, client, func, timeout=600, delay=10):
         try:
             func()
         except Exception as e:
-            if not hasattr(e, 'response') or e.response.status_code != 409:
+            if not hasattr(e, 'response'):
                 raise
-            log.debug('_retry_on_conflict(): retrying conflict')
+            status_code = e.response.status_code
+            if status_code not in (403, 409):
+                raise
+            log.debug('_retry_on_conflict(): retry status {}'.format(status_code))
+        else:
+            break
         time.sleep(delay)
 
 
 def do_set_boot_device(env, client, nodename, device):
     """Set the boot device for *nodename* to *device*."""
-    app, vm = get_app_vm_fail(env, client, nodename)
+    app, _ = get_app_vm_fail(env, client, nodename)
     appid = app['id']
     # We need to reload and retry saving back the application as there's
     # nothing preventing concurrent modifications. Fortunately Ravello detects
-    # this using a "version" key that is part of the app. This also explains wy
+    # this using a "version" key that is part of the app. This also explains why
     # we reload the app on every iteration below.
+    # Due to a bug in Ravello, the "bootOrder" property is ignored. As a
+    # workaround we toggle the "boot" flag on the drive.
     def set_boot_device():
         app = client.get_application(appid)
-        vm = _get_vm(app, nodename)
+        vm = _get_vm(app, nodename, 'design')
         drive = _get_disk(vm)
         drive['boot'] = bool(device == 'hd')
         client.update_application(app)
-    _retry_on_conflict(env, set_boot_device, 60, 1)
-    # Same for publish changes. Here we wait longer because we cannot publish
-    # updates if there's a VM in a transient state (STARTING / STOPPING).
-    def publish_updates():
-        client.publish_application_updates(appid)
-    _retry_on_conflict(env, publish_updates, 600, 10)
+    _retry_on_conflict(env, client, set_boot_device, 60, 2)
+    # Should be able to publish updates even if VMs are in a transient state.
+    client.publish_application_updates(appid)
 
 
 def _main():
@@ -259,7 +260,7 @@ def _main():
     env = get_ssh_environ()
 
     cmdline = parse_virsh_command_line(env)
-    log.debug('Parsed command = {!r}'.format(cmdline))
+    log.info('Parsed command = {!r}'.format(cmdline))
 
     client = get_ravello_client(env)
 
