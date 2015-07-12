@@ -131,7 +131,7 @@ def _wait_for_status(env, client, nodename, state, timeout=1200):
         app, vm = get_app_vm_fail(env, client, nodename)
         log.debug('_wait_for_status(): current state {}'.format(vm['state']))
         if vm['state'] == state:
-            break
+            return
         time.sleep(10)
     wait_time = time.time() - start_time
     raise RuntimeError('VM {} timeout {:.0f}s waiting for {}'.format(nodename, wait_time, state))
