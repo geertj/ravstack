@@ -260,7 +260,7 @@ def _main():
     env = get_ssh_environ()
 
     cmdline = parse_virsh_command_line(env)
-    log.info('Parsed command = {!r}'.format(cmdline))
+    log.info('Parsed command: {}'.format(' '.join(cmdline)))
 
     client = get_ravello_client(env)
 

@@ -101,8 +101,11 @@ def setup_logging():
     template = '%(asctime)s %(levelname)s [%(name)s] %(message)s'
     handler.setFormatter(logging.Formatter(template))
     logger.setLevel(logging.DEBUG if get_debug() else logging.INFO)
-    import urllib3
-    urllib3.disable_warnings()
+    logger = logging.getLogger('requests.packages.urllib3.connectionpool')
+    logger.setLevel(logging.DEBUG if get_debug() else logging.WARNING)
+    logging.captureWarnings(True)
+    logger = logging.getLogger('py.warnings')
+    logger.setLevel(logging.ERROR)
 
 
 def get_logger(context=''):
