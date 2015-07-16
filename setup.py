@@ -19,7 +19,7 @@ version_info = {
     'url': 'https://github.com/geertj/raviron',
     'license': 'MIT',
     'classifiers': [
-        'Development Status :: 5 - Beta',
+        'Development Status :: 4 - Beta',
         'License :: OSI Approved :: MIT License',
         'Operating System :: POSIX',
         'Programming Language :: Python :: 3.3',
