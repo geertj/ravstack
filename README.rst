@@ -31,8 +31,8 @@ First you need to install EPEL and Python 3.4::
   $ sudo yum install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
   $ sudo yum install python34
 
-Then you need to install Raviron. It is recommended to install it in the
-"stack" account. Instructions::
+Now you need to install Raviron. It is recommended to install it in the "stack"
+account::
 
   $ sudo pip install raviron
   $ sudo mkdir /etc/raviron
@@ -82,7 +82,7 @@ Creating Nodes
 --------------
 
 Raviron can create new nodes for you that you can use with RDO-Manager. To
-create nodes, repeat the following command as many times as needed:
+create nodes, repeat the following command as many times as needed::
 
   $ raviron node-create
 
