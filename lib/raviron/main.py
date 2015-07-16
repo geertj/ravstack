@@ -11,16 +11,31 @@
 Usage:
   raviron [options] proxy-create
   raviron [options] proxy-run
-  raviron [options] node-create [-c <cpus>] [-m <memory>] [-D <disk>]
-                                [-n <count>]
-  raviron [options] node-sync [-o <file>]
+  raviron [options] node-create [-c <cpus>] [-m <memory>]
+                                [-D <disk>] [-n <count>]
+  raviron [options] node-dump [-o <file>]
+  raviron [options] node-list [--all]
+  raviron [options] node-start <node>
+  raviron [options] node-stop <node>
+  raviron [options] node-reboot <node>
+  raviron [options] node-get-boot-device <node>
+  raviron [options] node-set-boot-device <node> <bootdev>
+  raviron [options] node-get-macs <node>
   raviron --help
 
 Command help:
-  proxy-create      Create SSH->Ravello API proxy.
-  proxy-run         Run the API proxy.
-  node-create       Create a new node, add it to `~/nodes.json`.
-  node-sync         Sync all nodes to `~/nodes.json`.
+  proxy-create          Create SSH->Ravello API proxy.
+  proxy-run             Run the API proxy.
+  node-create           Create a new node.
+  node-dump             Dump node definitions to specified file.
+  node-list             List running nodes (--all lists all).
+  node-start            Start a node.
+  node-stop             Stop a node.
+  node-reboot           Reboot a node.
+  node-get-boot-device  Return boot device for <node>.
+  node-set-boot-device  Set boot device for <node> to <bootdev>.
+                        The boot device may be "hd" or "network".
+  node-get-macs         Return MAC addresses for <node>.
 
 Options:
   -d, --debug       Enable debugging.
@@ -31,6 +46,7 @@ Options:
                     Ravello API password.
   -a <application>, --application=<application>
                     The Ravello application name.
+  --all             List all nodes.
 
 Options for `node-create`:
   -c <cpus>, --cpus=<cpus>
@@ -59,13 +75,29 @@ def _main():
     env = factory.get_environ(args)
 
     if args['proxy-create']:
-        proxy.create_main(env)
+        proxy.do_create(env)
     elif args['proxy-run']:
-        proxy.run_main(env)
+        proxy.do_run(env)
     elif args['node-create']:
-        node.create_main(env)
-    elif args['node-sync']:
-        node.sync_main(env)
+        node.do_create(env)
+    elif args['node-dump']:
+        node.do_dump(env)
+    elif args['node-list'] and not args.get('--all'):
+        node.do_list_running(env, False)
+    elif args['node-list']:
+        node.do_list_all(env)
+    elif args['node-start']:
+        node.do_start(env, args['<node>'])
+    elif args['node-stop']:
+        node.do_stop(env, args['<node>'])
+    elif args['node-reboot']:
+        node.do_reboot(env, args['<node>'])
+    elif args['node-get-boot-device']:
+        node.do_get_boot_device(env, args['<node>'])
+    elif args['node-set-boot-device']:
+        node.do_set_boot_device(env, args['<node>'], args['<bootdev>'])
+    elif args['node-get-macs']:
+        node.do_get_macs(env, args['<node>'], False)
 
 
 def main():

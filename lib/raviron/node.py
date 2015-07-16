@@ -7,10 +7,12 @@
 # complete list.
 
 import os
+import sys
 import json
 import time
+import random
 
-from . import util, ravello
+from . import util, ravello, logging
 from .util import inet_aton, inet_ntoa
 
 
@@ -22,7 +24,70 @@ _magic_svm_cpuids = [
     {"index": "80000001", "value": "00000000000000000000001520100800"}, ]
 
 
-# node-create command
+class Retry(RuntimeError):
+    """Exception used to indicate to retry_operation() that it needs to
+    retry."""
+
+
+_default_retries = {409: 10}
+
+def retry_operation(func, timeout=60, retries=None):
+    """Retry an operation on various 4xx errors."""
+    log = logging.get_logger()
+    end_time = time.time() + timeout
+    tries = {}
+    if retries is None:
+        retries = _default_retries
+    count = 0
+    delay = min(10, max(2, timeout/100))
+    start_time = time.time()
+    while end_time > time.time():
+        count += 1
+        try:
+            func()
+        except ravello.HTTPError as e:
+            status = e.response.status_code
+            if status not in retries:
+                raise
+            log.debug('Retry: {!s}'.format(e))
+            tries.setdefault(status, 0)
+            tries[status] += 1
+            if not 0 < tries[status] < retries[status]:
+                log.error('Max retries reached for status {} ({})'
+                                .format(status, retries[status]))
+                raise
+            log.warning('Retry number {} out of {} for status {}.'
+                            .format(tries[status], retries[status], status))
+        except Retry as e:
+            log.warning('Retry requested: {}.'.format(e))
+        else:
+            time_spent = time.time() - start_time
+            log.debug('Operation succeeded after {} attempt{} ({:.2f} seconds).'
+                            .format(count, 's' if count > 1 else '', time_spent))
+            return
+        loop_delay = delay + random.random()
+        log.debug('Sleeping for {:.2f} seconds.'.format(loop_delay))
+        time.sleep(loop_delay)
+    time_spent = time.time() - start_time
+    raise RuntimeError('Timeout retrying function `{.__name__}` ({:.2f} seconds).'
+                        .format(func, time_spent))
+
+
+def get_vm(app, nodename, scope='deployment'):
+    """Return the VM *nodename* from *app*."""
+    for vm in app.get(scope, {}).get('vms', []):
+        if vm['name'] == nodename:
+            return vm
+    raise RuntimeError('Application `{}` unknown vm `{}`.'.format(app['name'], nodename))
+
+
+def get_disk(vm):
+    """Return the hard drive for *vm*."""
+    for drive in vm.get('hardDrives', []):
+        if drive['type'] == 'DISK':
+            return drive
+    raise RuntimeError('VM {} does not have a DISK'.format(vm['name']))
+
 
 def find_all_ips(app, subnet, mask):
     """Yield all IPs in the application that are on subnet/mask."""
@@ -106,8 +171,8 @@ def create_node(env, new_name):
     return node
 
 
-def create_main(env):
-    """The `raviron node-create` command."""
+def do_create(env):
+    """The `node-create` command."""
     log = env.logger
     client = env.client
 
@@ -148,12 +213,8 @@ def create_main(env):
                                           ', '.join(new_names)))
 
 
-# node-sync command
-
-def sync_main(env):
-    """The `raviron node-sync` command."""
-    app = env.application
-
+def do_dump(env):
+    """The `node-dump` command."""
     keyname = env.config['proxy']['key_name']
     keyfile = os.path.join(util.get_homedir(), '.ssh', keyname)
     if not util.can_open(keyfile):
@@ -191,3 +252,163 @@ def sync_main(env):
         fout.write(json.dumps({'nodes': nodes}, sort_keys=True, indent=2))
 
     print('Wrote {} nodes to `{}`.'.format(len(nodes), nodes_file))
+
+
+def do_list_running(env, virsh_format=False):
+    """The `node-list command."""
+    for node in env.nodes[1:]:
+        name = node['name']
+        if virsh_format:
+            # Yes it needs quotes, unlike do_list_all().
+            name = '"{}"'.format(name)
+        if node['state'] in ('STARTING', 'STARTED'):
+            sys.stdout.write('{}\n'.format(name))
+
+
+def do_list_all(env):
+    """The `node-list --all` command."""
+    for node in env.nodes[1:]:
+        sys.stdout.write('{}\n'.format(node['name']))
+
+
+def do_start(env, nodename):
+    """The `node-start` command."""
+    log = env.logger
+    app = env.application
+    # First extend runtime to min_runtime, if needed.
+    def extend_runtime():
+        exp = {'expirationFromNowSeconds': min_runtime*60}
+        env.client.call('POST', '/applications/{id}/setExpiration'.format(**app), exp)
+    nextstop = app.get('nextStopTime')
+    min_runtime = env.config['ravello'].getint('min_runtime')
+    if nextstop and nextstop/1000 < (time.time() + min_runtime*60):
+        # This call should not fail even if vms are in a transient state.
+        log.debug('Expiration less than minimum requested, extending runtime.')
+        retry_operation(extend_runtime)
+    # Now start it up, taking into account the current vm state.
+    is_retry = False
+    def start_vm():
+        nonlocal app, is_retry
+        # Reload because someone else could have changed the power state in the
+        # mean time.
+        if is_retry:
+            app = env.client.call('GET', '/applications/{id}'.format(**app))
+            vm = get_vm(app, nodename)
+        is_retry = True
+        vm = get_vm(app, nodename)
+        state = vm['state']
+        if state in ('STARTED', 'STARTING', 'RESTARTING'):
+            return
+        if state == 'STOPPING':
+            raise Retry('Node in state `{}`'.format(state))
+        # STOPPED
+        env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/start'
+                                    .format(app=env.application, vm=vm))
+    # According to the docs, 400 means the application is in the middle of
+    # another action, but I get 409 instead.
+    # Retry just 3 times in case of HTTP errors. Most of the times the code
+    # aborts early based on the state of the VM and doesn't actually try to
+    # call the start action if we know it will fail. The retries here are for
+    # race conditions where someone else started up the VM concurrently. In the
+    # next iteration, we should detect the updated state and exit cleanly.
+    log.debug('Starting vm `{}`.'.format(nodename))
+    retry_operation(start_vm, 1200, {400: 3, 403: 3, 409: 3})
+    env.application = app
+
+
+def do_stop(env, nodename):
+    """The `node-stop` command."""
+    log = env.logger
+    app = env.application
+    is_retry = False
+    def stop_vm():
+        nonlocal app, is_retry
+        if is_retry:
+            app = env.client.call('GET', '/applications/{id}'.format(**app))
+        is_retry = True
+        vm = get_vm(app, nodename)
+        state = vm['state']
+        if state in ('STOPPED', 'STOPPING'):
+            return
+        if state in ('STARTING', 'RESTARTING'):
+            raise Retry('Node in state `{}`'.format(state))
+        # STARTED
+        env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/poweroff'
+                                    .format(app=env.application, vm=vm))
+    log.debug('Stopping vm `{}`.'.format(nodename))
+    retry_operation(stop_vm, 1200, {400: 3, 403: 3, 409: 3})
+    env.application = app
+
+
+def do_reboot(env, nodename):
+    """The `node-reboot` command."""
+    log = env.logger
+    app = env.application
+    is_retry = False
+    def stop_vm():
+        nonlocal app, is_retry
+        if is_retry:
+            app = env.client.call('GET', '/applications/{id}'.format(**app))
+        is_retry = True
+        vm = get_vm(app, nodename)
+        state = vm['state']
+        if state in ('STARTING', 'RESTARTING'):
+            return
+        if state == 'STOPPING':
+            raise Retry('Node in state `{}`'.format(state))
+        # STOPPED or STARTED
+        env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/restart'
+                                    .format(app=env.application, vm=vm))
+    log.debug('Rebooting vm `{}`.'.format(nodename))
+    retry_operation(stop_vm, 1200, {400: 3, 403: 3, 409: 3})
+    env.application = app
+
+
+def do_get_boot_device(env, nodename):
+    """The `node-get-boot-device` command."""
+    vm = get_vm(env.application, nodename)
+    drive = get_disk(vm)
+    print('hd' if drive.get('boot') else 'network')
+
+
+def do_set_boot_device(env, nodename, device):
+    """Set the boot device for *nodename* to *device*."""
+    log = env.logger
+    app = env.application
+    is_retry = False
+    def set_boot_device():
+        nonlocal app, is_retry
+        if is_retry:
+            app = env.client.call('GET', '/applications/{id}'.format(**app))
+        is_retry = True
+        vm = get_vm(app, nodename)
+        state = vm['state']
+        if state in ('STARTING', 'STOPPING', 'RESTARTING'):
+            raise Retry('Node in state `{}`'.format(state))
+        vm = get_vm(app, nodename, 'design')
+        drive = get_disk(vm)
+        drive['boot'] = bool(device == 'hd')
+        env.client.call('PUT', '/applications/{id}'.format(**app), app)
+    log.debug('Setting boot device for node `{}` to `{}`'.format(nodename, device))
+    retry_operation(set_boot_device, 1200, {400: 3, 403: 3, 409: 3})
+    def publish_updates():
+        env.client.call('POST', '/applications/{id}/publishUpdates'.format(**app))
+    log.debug('Publishing updates for application `{name}`.'.format(**app))
+    retry_operation(publish_updates)
+    env.application = app
+
+
+def do_get_macs(env, nodename, virsh_format=False):
+    """The `node-get-macs` command."""
+    vm = get_vm(env.application, nodename)
+    for conn in vm.get('networkConnections', []):
+        device = conn.get('device', {})
+        mac = device.get('mac')
+        if mac is None:
+            mac = device.get('generatedMac')
+        if not mac:
+            continue
+        if virsh_format:
+            mac = mac.replace(':', '')
+        if mac:
+            sys.stdout.write('{}\n'.format(mac))

@@ -51,7 +51,7 @@ def get_ravello_application(env):
     name = config.require(env.config, 'ravello', 'application')
     apps = env.client.call('POST', '/applications/filter', ravello.simple_filter(name=name))
     if len(apps) == 0:
-        raise RuntimeError('application {} not found'.format(name))
+        raise RuntimeError('Application `{}` not found'.format(name))
     app = env.client.call('GET', '/applications/{id}'.format(**apps[0]))
     return app
 
