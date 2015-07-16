@@ -12,7 +12,7 @@ Usage:
   raviron [options] proxy-create
   raviron [options] proxy-run
   raviron [options] node-create [-c <cpus>] [-m <memory>] [-D <disk>]
-                                [-n <network>]...
+                                [-n <count>]
   raviron [options] node-sync [-o <file>]
   raviron --help
 
@@ -39,9 +39,8 @@ Options for `node-create`:
                     The amount of memory in MB. [default: 8192]
   -D <disk>, --disk=<disk>
                     The size of the disk in GB. [default: 60]
-  -n <network>, --network=<network>
-                    Network specification. Use the following format:
-                    ethX,ip/mask[,gateway[,dns]]
+  -n <count>, --count=<count>
+                    The number of nodes to create. [default: 1]
 
 Options for `node-sync`:
   -o <file>, --output=<file>

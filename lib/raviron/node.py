@@ -9,11 +9,9 @@
 import os
 import json
 import time
-import socket
-import struct
-import copy
 
-from . import util, ravello, config
+from . import util, ravello
+from .util import inet_aton, inet_ntoa
 
 
 _magic_svm_cpuids = [
@@ -25,53 +23,6 @@ _magic_svm_cpuids = [
 
 
 # node-create command
-
-def inet_aton(s):
-    """Like `socket.inet_aton()` but returns an int."""
-    packed = socket.inet_aton(s)
-    return struct.unpack('!I', packed)[0]
-
-def inet_ntoa(i):
-    """Like `socket.inet_nota()` but accepts an int."""
-    packed = struct.pack('!I', i)
-    return socket.inet_ntoa(packed)
-
-
-def get_pxe_iso(env):
-    """Return the disk image for the PXE boot iso."""
-    name = config.require(env.config, 'ravello', 'pxe_iso')
-    images = env.client.call('GET', '/diskImages')
-    for image in images:
-        if image['name'] == name:
-            return image
-    raise RuntimeError('PXE ISO `{}` not found.'.format(name))
-
-
-def get_nodes(app):
-    """Return the "nodes" from a Ravello application.
-
-    The list contains all VMs with static networking, and is sorted on
-    increasing IP on the first index.  The Ironic controller node will be the
-    first in the list, and will be followed by the managed nodes.
-    """
-    nodes = []
-    for vm in ravello.get_vms(app):
-        if not vm.get('networkConnections'):
-            continue
-        node = copy.deepcopy(vm)
-        node['networkConnections'].sort(key=lambda c: c['device']['index'])
-        all_static = True
-        for conn in node['networkConnections']:
-            scfg = conn.get('ipConfig', {}).get('staticIpConfig', {})
-            if 'ip' not in scfg or 'mask' not in scfg:
-                all_static = False
-                break
-        if all_static:
-            nodes.append(node)
-    nodes.sort(key=lambda vm: inet_aton(vm['networkConnections'][0]
-                                          ['ipConfig']['staticIpConfig']['ip']))
-    return nodes
-
 
 def find_all_ips(app, subnet, mask):
     """Yield all IPs in the application that are on subnet/mask."""
@@ -87,29 +38,19 @@ def find_all_ips(app, subnet, mask):
                     yield scfg['ip']
 
 
-def create_main(env):
-    """The `raviron node-create` command."""
-    log = env.logger
-    client = env.client
-    iso = get_pxe_iso(env)
-
-    app = env.application
-    vms = ravello.get_vms(app)
-
-    vm_names = [vm['name'] for vm in vms]
-
-    # Start building the new VM.
-    new_vm = {'name': util.unique_name_seqno('node{}', vm_names),
-              'description': 'Node created by raviron.',
-              'os': 'linux_manuel',  # sic
-              'baseVmId': 0,
-              'numCpus': env.args['--cpus'],
-              'memorySize': {'value': env.args['--memory'], 'unit': 'MB'},
-              'stopTimeOut': 180,
-              'cpuIds': _magic_svm_cpuids}
+def create_node(env, new_name):
+    """Create a new node and return it."""
+    node = {'name': new_name,
+            'description': 'Node created by raviron.',
+            'os': 'linux_manuel',  # sic
+            'baseVmId': 0,
+            'numCpus': env.args['--cpus'],
+            'memorySize': {'value': env.args['--memory'], 'unit': 'MB'},
+            'stopTimeOut': 180,
+            'cpuIds': _magic_svm_cpuids}
 
     # disk drives
-    drives = new_vm['hardDrives'] = []
+    drives = node['hardDrives'] = []
     drives.append({'index': 1,
                    'type': 'DISK',
                    'name': 'sda',
@@ -120,28 +61,23 @@ def create_main(env):
                    'type': 'CDROM',
                    'name': 'cdrom',
                    'controller': 'IDE',
-                   'baseDiskImageId': iso['id']})
+                   'baseDiskImageId': env.iso['id']})
 
     # Networks is the most complicated part. The idea is to connect to every
     # subnet that is defined on the Ironic node, using an IP that is higher
     # than any other node on that subnet.
 
-    nodes = get_nodes(app)
-    if not nodes:
-        raise RuntimeError('Unable to find control node.')
-    control_node = nodes[0]
-
     # Add network interfaces by copying the ones from the Ironic node.
 
-    delta = 1 if len(nodes) > 1 else 10
-    conns = new_vm['networkConnections'] = []
+    delta = 1 if len(env.nodes) > 1 else 10
+    conns = node['networkConnections'] = []
 
-    for conn in control_node['networkConnections']:
+    for conn in env.nodes[0]['networkConnections']:
         dev = conn['device']
         icfg = conn['ipConfig']
         scfg = icfg['staticIpConfig']
         subnet = inet_ntoa(inet_aton(scfg['ip']) & inet_aton(scfg['mask']))
-        max_ip = sorted(find_all_ips(app, subnet, scfg['mask']),
+        max_ip = sorted(find_all_ips(env.application, subnet, scfg['mask']),
                         key=lambda ip: inet_aton(ip))[-1]
         new_ip = inet_ntoa(inet_aton(max_ip) + delta)
         if inet_ntoa(inet_aton(new_ip) & inet_aton(scfg['mask'])) != subnet:
@@ -160,17 +96,42 @@ def create_main(env):
 
     # Network services: enable ssh on first network interface
     first_ip = conns[0]['ipConfig']['staticIpConfig']['ip']
-    services = new_vm['suppliedServices'] = []
+    services = node['suppliedServices'] = []
     services.append({'name': 'ssh',
                      'portRange': '22',
                      'protocol': 'TCP',
                      'external': True,
                      'ip': first_ip})
 
-    # Ready to create the node!
-    app['design']['vms'].append(new_vm)
+    return node
 
-    # First extend runtime to minimum runtime if needed.
+
+def create_main(env):
+    """The `raviron node-create` command."""
+    log = env.logger
+    client = env.client
+
+    app = env.application
+    vms = ravello.get_vms(app)
+    vm_names = [vm['name'] for vm in vms]
+
+    try:
+        count = int(env.args['--count'])
+    except ValueError:
+        raise ValueError('Illegal value for --count: {}'
+                                .format(env.args['--count']))
+    new_names = []
+
+    # Create and add the nodes
+    for i in range(count):
+        name = util.unique_name_seqno('node{}', vm_names)
+        vm_names.append(name)
+        new_names.append(name)
+        node = create_node(env, name)
+        app['design']['vms'].append(node)
+        env.nodes.append(node)
+
+    # Extend runtime to minimum runtime if needed.
     nextstop = app.get('nextStopTime')
     min_runtime = env.config['ravello'].getint('min_runtime')
     if nextstop and nextstop/1000 < time.time() + min_runtime*60:
@@ -178,12 +139,13 @@ def create_main(env):
         exp = {'expirationFromNowSeconds': min_runtime*60}
         client.call('POST', '/applications/{id}/setExpiration'.format(**app), exp)
 
-    # Now update application and publish updates. Do not start new node.
+    # Now update application and publish updates. Do not start new nodes.
     client.call('PUT', '/applications/{id}'.format(**app), app)
     client.request('POST', '/applications/{id}/publishUpdates'
                            '?startAllDraftVms=false'.format(**app))
 
-    print('Created new node {name}.'.format(**new_vm))
+    print('Created {} node{}: {}.'.format(count, 's' if count > 1 else '',
+                                          ', '.join(new_names)))
 
 
 # node-sync command
@@ -204,7 +166,7 @@ def sync_main(env):
     # Get node definitions from Ravello
 
     nodes = []
-    for vm in ravello.get_vms(app):
+    for vm in env.nodes[1:]:
         node = {'arch': 'x86_64',
                 'cpu': str(vm['numCpus']),
                 'memory': str(ravello.convert_size(vm['memorySize'], 'MB')),

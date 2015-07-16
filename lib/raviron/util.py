@@ -9,6 +9,8 @@
 import os
 import pwd
 import errno
+import socket
+import struct
 import re
 
 
@@ -79,3 +81,14 @@ def unique_name_seqno(template, names):
             continue
         maxseq = max(maxseq, int(match.group(1)))
     return template.format(maxseq + 1)
+
+
+def inet_aton(s):
+    """Like `socket.inet_aton()` but returns an int."""
+    packed = socket.inet_aton(s)
+    return struct.unpack('!I', packed)[0]
+
+def inet_ntoa(i):
+    """Like `socket.inet_nota()` but accepts an int."""
+    packed = struct.pack('!I', i)
+    return socket.inet_ntoa(packed)
