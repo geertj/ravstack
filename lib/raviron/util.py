@@ -6,42 +6,12 @@
 # Copyright (c) 2015 the Raviron authors. See the file "AUTHORS" for a
 # complete list.
 
-from __future__ import absolute_import, print_function
-
 import os
 import pwd
 import errno
-import functools
-import logging
 import re
 
 
-def get_debug():
-    """Return whether debugging is requested."""
-    return os.environ.get('DEBUG', '0') not in ('0', 'n')
-
-def set_debug(enabled=True):
-    """Enable debugging."""
-    os.environ['DEBUG'] = '1' if enabled else '0'
-
-
-_memodata = {}
-
-def memoize(func):
-    """Memoizes a function.
-
-    Note: ignores function arguments when memoizing.
-    """
-    @functools.wraps(func)
-    def wrapped(*args, **kwargs):
-        key = getattr(func, '__qualname__', func.__name__)
-        if key not in _memodata:
-            _memodata[key] = func(*args, **kwargs)
-        return _memodata[key]
-    return wrapped
-
-
-@memoize
 def get_homedir():
     """Return the user home directory."""
     home = os.environ.get('HOME')
@@ -49,6 +19,14 @@ def get_homedir():
         pw = pwd.getpwuid(os.getuid())
         home = pw.pw_dir
     return home
+
+def get_user():
+    """Return the current user name."""
+    user = os.environ.get('LOGNAME')
+    if user is None:
+        pw = pwd.getpwuid(os.getuid())
+        user = pw.pw_name
+    return user
 
 
 def create_directory(dirname, mode=0o755):
@@ -60,57 +38,44 @@ def create_directory(dirname, mode=0o755):
             raise
 
 
-_re_field = re.compile(r'\{[^}]+\}')
+def try_stat(fname):
+    """Call `os.stat(fname)`. Return the stat result, or `None` if the file
+    does not exist."""
+    try:
+        return os.stat(fname)
+    except OSError as e:
+        if e.errno != errno.ENOENT:
+            raise
 
-def create_unique_file_seqno(dirname, template, mode=0o755):
-    """Return a new unique file based on a prefix and a sequence number.
 
-    Return the file name and the sequence number allocated.
-    """
+def can_open(fname, mode='r'):
+    """Return whether file *fname* is writable by us."""
+    try:
+        with open(fname, mode):
+            return True
+    except IOError as e:
+        if e.errno not in (errno.ENOENT, errno.EACCES):
+            raise
+        return False
+
+
+def mask_dict(d, *names):
+    """Mask certain values in a dict."""
+    m = {}
+    for k, v in d.items():
+        m[k] = '****' if k in names else v
+    return m
+
+
+_re_field = re.compile(r'\{[^}]*\}')
+
+def unique_name_seqno(template, names):
+    """Return a new unique name based on a template."""
     re_seqno = re.compile(_re_field.sub('([0-9]+)', template))
     maxseq = 0
-    for entry in os.listdir(dirname):
-        match = re_seqno.match(entry)
+    for name in names:
+        match = re_seqno.match(name)
         if not match:
             continue
         maxseq = max(maxseq, int(match.group(1)))
-    seqno = maxseq + 1
-    while True:
-        fname = os.path.join(dirname, template.format(seqno))
-        try:
-            fd = os.open(fname, os.O_CREAT|os.O_EXCL, mode)
-            break
-        except IOError as e:
-            if e.errno != errno.EEXIST:
-                raise
-        finally:
-            os.close(fd)
-        seqno += 1
-    return seqno, fname
-
-
-@memoize
-def setup_logging():
-    homedir = get_homedir()
-    logdir = os.path.join(homedir, 'logs')
-    create_directory(logdir)
-    logfile = os.path.join(logdir, 'raviron.log')
-    logger = logging.getLogger()
-    handler = logging.FileHandler(logfile)
-    logger.addHandler(handler)
-    template = '%(asctime)s %(levelname)s [%(name)s] %(message)s'
-    handler.setFormatter(logging.Formatter(template))
-    logger.setLevel(logging.DEBUG if get_debug() else logging.INFO)
-    logger = logging.getLogger('requests.packages.urllib3.connectionpool')
-    logger.setLevel(logging.DEBUG if get_debug() else logging.WARNING)
-    logging.captureWarnings(True)
-    logger = logging.getLogger('py.warnings')
-    logger.setLevel(logging.ERROR)
-
-
-def get_logger(context=''):
-    """Return the application logger."""
-    setup_logging()
-    logger = logging.getLogger('raviron')
-    # TODO: add context
-    return logger
+    return template.format(maxseq + 1)

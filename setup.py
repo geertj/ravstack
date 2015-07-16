@@ -6,25 +6,22 @@
 # Copyright (c) 2015 the Raviron authors. See the file "AUTHORS" for a
 # complete list.
 
-from __future__ import absolute_import, print_function
-
 import os
 from setuptools import setup
 
 
 version_info = {
     'name': 'raviron',
-    'version': '0.9.dev0',
+    'version': '0.9.1',
     'description': 'OpenStack Ironic power control for Ravello Systems',
     'author': 'Geert Jansen',
     'author_email': 'geertj@gmail.com',
     'url': 'https://github.com/geertj/raviron',
     'license': 'MIT',
     'classifiers': [
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 5 - Beta',
         'License :: OSI Approved :: MIT License',
         'Operating System :: POSIX',
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4'
     ]
@@ -47,8 +44,5 @@ if __name__ == '__main__':
         packages=['raviron'],
         package_dir={'': 'lib'},
         install_requires=get_requirements(),
-        entry_points={
-            'console_scripts': [
-                'create-key = raviron.keys:main',
-                'proxy-cmd = raviron.proxy:main']},
+        entry_points={'console_scripts': ['raviron = raviron.main:main']},
         **version_info)

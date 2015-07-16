@@ -1,3 +1,2 @@
-ravello-sdk
-six
 docopt
+requests

@@ -6,83 +6,123 @@
 # Copyright (c) 2015 the raviron authors. See the file "AUTHORS" for a
 # complete list.
 
-from __future__ import absolute_import, print_function
-
 import re
 import os
 import sys
-import json
 import time
+import shlex
+import random
+import subprocess
+import textwrap
 
-from ravello_sdk import RavelloClient
-from . import util
-
-
-@util.memoize
-def get_ravello_metadata():
-    """Get Ravello metadata from /etc/ravello/vm.json.
-
-    Returns the parsed JSON as a dictionary, or None if the Ravello metadata
-    file does not exist.
-    """
-    try:
-        with open('/etc/ravello/vm.json') as fin:
-            return json.loads(fin.read())
-    except IOError:
-        return
+from . import util, ravello, logging
 
 
-@util.memoize
-def get_ssh_environ():
-    """Return the environment needed when running under SSH."""
-    env = {}
-    env['DEBUG'] = os.environ.get('DEBUG', '0')
-    for key in ('RAVELLO_USERNAME', 'RAVELLO_PASSWORD', 'SSH_ORIGINAL_COMMAND'):
-        if key not in os.environ:
-            raise RuntimeError('missing environment variable: ${}'.format(key))
-        env[key] = os.environ[key]
-    app = os.environ.get('RAVELLO_APPLICATION')
-    if app is None:
-        meta = get_ravello_metadata()
-        if meta is None:
-            raise RuntimeError('missing environment variable: $RAVELLO_APPLICATION')
-        app = meta['appName']
-    env['RAVELLO_APPLICATION'] = app
-    return env
+# proxy-create command
+
+def create_ssh_keypair(keyname, comment):
+    """Create a new ssh keypair."""
+    sshdir = os.path.join(util.get_homedir(), '.ssh')
+    util.create_directory(sshdir, 0o700)
+    keyfile = os.path.join(sshdir, keyname)
+    if util.try_stat(keyfile):
+        raise RuntimeError('~/.ssh/{} already exists'.format(keyname))
+    subprocess.check_call(['ssh-keygen', '-f', keyfile, '-N', "", '-q', '-C', comment])
+    os.chmod(keyfile, 0o600)
+    os.chmod(keyfile + '.pub', 0o644)
+    return keyfile
 
 
-@util.memoize
-def get_ravello_client(env):
-    """Return a connected Ravello client."""
-    client = RavelloClient(env['RAVELLO_USERNAME'], env['RAVELLO_PASSWORD'])
-    client.login()
-    return client
+def create_proxy(proxyname):
+    """Create a proxy wrapper."""
+    # Running in a software collection?
+    enable_scls = []
+    scls = os.environ.get('X_SCLS', '')
+    for scl in scls.split():
+        with open('/etc/scl/conf/{}'.format(scl)) as fin:
+            prefix = fin.readline().rstrip()
+        enable_scls.append('. {}/{}/enable'.format(prefix, scl))
+    if scls:
+        enable_scls.append('X_SCLS={}'.format(shlex.quote(scls)))
+        enable_scls.append('export X_SCLS')
+    else:
+        enable_scls.append('# No software collections enabled.')
+    enable_scls = '\n'.join(enable_scls)
+    # Running in a virtualenv?
+    venv = os.environ.get('VIRTUAL_ENV')
+    enable_venv = '. {}/bin/activate'.format(venv) if venv else '# No virtualenv enabled.'
+    # Create the ~/bin directory if needed
+    bindir = os.path.join(util.get_homedir(), 'bin')
+    proxyfile = os.path.join(bindir, proxyname)
+    util.create_directory(bindir, 0o755)
+    contents = textwrap.dedent("""\
+            #!/bin/sh
+            {}
+            {}
+            exec raviron proxy-run
+            """).format(enable_scls, enable_venv)
+    with open(proxyfile, 'w') as fout:
+        fout.write(contents)
+    os.chmod(proxyfile, 0o700)
+    return proxyfile
 
+
+def install_proxy(pubkey, command):
+    """Add a public key to the authorized_keys file."""
+    with open(pubkey) as fin:
+        keydata = fin.read()
+    sshdir = os.path.join(util.get_homedir(), '.ssh')
+    authentry = 'no-pty,no-port-forwarding,no-X11-forwarding,no-agent-forwarding'
+    authentry += ',command="{}" '.format(command)
+    authentry += keydata
+    authfile = os.path.join(sshdir, 'authorized_keys')
+    with open(authfile, 'a') as fout:
+        fout.write(authentry)
+    os.chmod(authfile, 0o600)
+
+
+_key_name = 'id_raviron'
+_proxy_name = 'raviron-proxy'
+
+def create_main(env):
+    """The `raviron proxy-create` command."""
+    keyname = env.config['proxy']['key_name']
+    proxyname = env.config['proxy']['proxy_name']
+    keyfile = create_ssh_keypair(keyname, proxyname)
+    proxyfile = create_proxy(proxyname)
+    install_proxy(keyfile + '.pub', proxyfile)
+    print('Private key created as: ~/.ssh/{}'.format(keyname))
+    print('Proxy created at: ~/bin/{}'.format(proxyname))
+
+
+# proxy-run command
 
 # These are the virsh commands used by the ssh power driver in Ironic.
 # They need to match and be kept up to date with the following file:
 # https://github.com/openstack/ironic/blob/master/ironic/drivers/modules/ssh.py#L151
 
 _virsh_commands = [
-    ('start', re.compile('start ([^ ]+)')),
-    ('stop', re.compile('destroy ([^ ]+)')),
-    ('reboot', re.compile('reset ([^ ]+)')),
-    ('get_node_macs', re.compile('dumpxml ([^ ]+) .*mac')),
-    ('list_running', re.compile('list --all.*running')),
-    ('list_all', re.compile('list --all')),
-    ('get_boot_device', re.compile('dumpxml ([^ ]+) .*boot')),
+    ('start', re.compile(' start ([^ ]+)')),
+    ('stop', re.compile(' destroy ([^ ]+)')),
+    ('reboot', re.compile(' reset ([^ ]+)')),
+    ('get_node_macs', re.compile(' dumpxml ([^ ]+) .*mac')),
+    ('list_running', re.compile(' list --all.*running')),
+    ('list_all', re.compile(' list --all')),
+    ('get_boot_device', re.compile(' dumpxml ([^ ]+) .*boot')),
     ('set_boot_device', re.compile(r'boot dev=\\"([^\\]+)\\".* edit ([^ ]+)')),
 ]
 
 
-def parse_virsh_command_line(env):
+def parse_virsh_command_line():
     """Parse the virsh command line.
 
     The proxy script is run as a forced command specified in an ssh private
     key. The original command is available in the $SSH_ORIGINAL_COMMAND
     environment variable.
     """
-    command = env['SSH_ORIGINAL_COMMAND']
+    command = os.environ.get('SSH_ORIGINAL_COMMAND')
+    if command is None:
+        raise RuntimeError('This command needs to be run through ssh.')
     for cmd, regex in _virsh_commands:
         match = regex.search(command)
         if match:
@@ -91,129 +131,192 @@ def parse_virsh_command_line(env):
 
 
 def get_app_fail(env, client):
-    """Return the application in $RAVELLO_APPLICATION.
-
-    An exception is raised if the application does not exist.
-    """
+    """Return the application in $RAVELLO_APPLICATION."""
     name = env['RAVELLO_APPLICATION']
-    apps = client.get_applications(filter={'name': name})
+    apps = client.call('POST', '/applications/filter', ravello.simple_filter(name=name))
     if not apps:
-        raise RuntimeError('application {} does not exist'.format(name))
-    return client.get_application(apps[0]['id'])
+        raise RuntimeError('application {} not found'.format(name))
+    return client.call('GET', '/applications/{id}'.format(**apps[0]))
 
 
-def _get_vm(app, nodename, scope='deployment'):
+def get_vm(app, nodename, scope='deployment'):
     """Return the VM *nodename* from *app*."""
     for vm in app.get(scope, {}).get('vms', []):
         if vm['name'] == nodename:
             return vm
-    raise RuntimeError('App {} does not have a VM {}'.format(app['name'], nodename))
+    raise RuntimeError('application {} unknown vm {}'.format(app['name'], nodename))
 
 
-def get_app_vm_fail(env, client, nodename):
-    """Return the application and VM from $RAVELLO_APPLICATION and *nodename*.
-
-    An exception is raised if the application or the VM does not exist.
-    """
-    app = get_app_fail(env, client)
-    vm = _get_vm(app, nodename)
-    return app, vm
+class Retry(RuntimeError):
+    """Exception used to indicate to retry_operation() that it needs to
+    retry."""
 
 
-def _wait_for_status(env, client, nodename, state, timeout=1200):
-    """Wait until *nodename* is in *state*."""
-    log = util.get_logger()
-    start_time = time.time()
-    end_time = start_time + timeout
-    while end_time > time.time():
-        wait_time = time.time() - start_time
-        log.debug('_wait_for_status(): waiting for {} ({:.0f}s)'.format(state, wait_time))
-        app, vm = get_app_vm_fail(env, client, nodename)
-        log.debug('_wait_for_status(): current state {}'.format(vm['state']))
-        if vm['state'] == state:
-            return
-        time.sleep(10)
-    wait_time = time.time() - start_time
-    raise RuntimeError('VM {} timeout {:.0f}s waiting for {}'.format(nodename, wait_time, state))
+_default_retries = {409: 10}
 
-
-def _retry_operation(func, timeout=60, delay=2):
+def retry_operation(func, timeout=60, retries=None):
     """Retry an operation on various 4xx errors."""
-    log = util.get_logger()
+    log = logging.get_logger()
     end_time = time.time() + timeout
+    tries = {}
+    if retries is None:
+        retries = _default_retries
+    count = 0
+    delay = min(10, max(2, timeout/100))
+    start_time = time.time()
     while end_time > time.time():
+        count += 1
         try:
             func()
-        except Exception as e:
-            if not hasattr(e, 'response'):
+        except ravello.HTTPError as e:
+            status = e.response.status_code
+            if status not in retries:
                 raise
-            status_code = e.response.status_code
-            if status_code not in (400, 403, 409):
+            log.debug('Retry: {!s}'.format(e))
+            tries.setdefault(status, 0)
+            tries[status] += 1
+            if not 0 < tries[status] < retries[status]:
+                log.error('Max retries reached for status {} ({})'
+                                .format(status, retries[status]))
                 raise
-            log.warning('_retry_operation(): retry on status {}'.format(status_code))
+            log.warning('Retry number {} out of {} for status {}.'
+                            .format(tries[status], retries[status], status))
+        except Retry as e:
+            log.warning('Retry requested: {}.'.format(e))
         else:
-            break
-        time.sleep(delay)
+            time_spent = time.time() - start_time
+            log.debug('Operation succeeded after {} attempt{} ({:.2f} seconds).'
+                            .format(count, 's' if count > 1 else '', time_spent))
+            return
+        loop_delay = delay + random.random()
+        log.debug('Sleeping for {:.2f} seconds.'.format(loop_delay))
+        time.sleep(loop_delay)
+    time_spent = time.time() - start_time
+    raise RuntimeError('Timeout retrying function `{.__name__}` ({:.2f} seconds).'
+                        .format(func, time_spent))
 
 
-def do_start(env, client, nodename):
+def do_start(env, nodename):
     """Start the VM with name *nodename*."""
-    app, vm = get_app_vm_fail(env, client, nodename)
-    state = vm['state']
-    if state in ('STARTED', 'STARTING'):
-        return
-    if state == 'STOPPING':
-        # Need to wait until it is in STOPPED, otherwise it cannot be started.
-        _wait_for_status(env, client, nodename, 'STOPPED')
-    _retry_operation(lambda: client.start_vm(app, vm))
+    log = env.logger
+    app = env.application
+    # First extend runtime to min_runtime, if needed.
+    def extend_runtime():
+        exp = {'expirationFromNowSeconds': min_runtime*60}
+        env.client.call('POST', '/applications/{id}/setExpiration'.format(**app), exp)
+    nextstop = app.get('nextStopTime')
+    min_runtime = env.config['ravello'].getint('min_runtime')
+    if nextstop and nextstop/1000 < (time.time() + min_runtime*60):
+        # This call should not fail even if vms are in a transient state.
+        log.debug('Expiration less than minimum requested, extending runtime.')
+        retry_operation(extend_runtime)
+    # Now start it up, taking into account the current vm state.
+    is_retry = False
+    def start_vm():
+        nonlocal app, is_retry
+        # Reload because someone else could have changed the power state in the
+        # mean time.
+        if is_retry:
+            app = env.client.call('GET', '/applications/{id}'.format(**app))
+            vm = get_vm(app, nodename)
+        is_retry = True
+        vm = get_vm(app, nodename)
+        state = vm['state']
+        if state in ('STARTED', 'STARTING', 'RESTARTING'):
+            return
+        if state == 'STOPPING':
+            raise Retry('Application in state `{}`'.format(state))
+        # STOPPED
+        env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/start'
+                                    .format(app=env.application, vm=vm))
+    # According to the docs, 400 means the application is in the middle of
+    # another action, but I get 409 instead.
+    # Retry just 3 times in case of HTTP errors. Most of the times the code
+    # aborts early based on the state of the VM and doesn't actually try to
+    # call the start action if we know it will fail. The retries here are for
+    # race conditions where someone else started up the VM concurrently. In the
+    # next iteration, we should detect the updated state and exit cleanly.
+    log.debug('Starting vm `{}`.'.format(nodename))
+    retry_operation(start_vm, 1200, {400: 3, 403: 3, 409: 3})
+    env.application = app
 
 
-def do_stop(env, client, nodename):
+def do_stop(env, nodename):
     """Stop the VM with name *nodename*."""
-    app, vm = get_app_vm_fail(env, client, nodename)
-    state = vm['state']
-    if state in ('STOPPED', 'STOPPING'):
-        return
-    if state == 'STARTING':
-        _wait_for_status(env, client, nodename, 'STARTED')
-    _retry_operation(lambda: client.stop_vm(app, vm))
+    log = env.logger
+    app = env.application
+    is_retry = False
+    def stop_vm():
+        nonlocal app, is_retry
+        if is_retry:
+            app = env.client.call('GET', '/applications/{id}'.format(**app))
+        is_retry = True
+        vm = get_vm(app, nodename)
+        state = vm['state']
+        if state in ('STOPPED', 'STOPPING'):
+            return
+        if state in ('STARTING', 'RESTARTING'):
+            raise Retry('Application in state `{}`'.format(state))
+        # STARTED
+        env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/poweroff'
+                                    .format(app=env.application, vm=vm))
+    log.debug('Stopping vm `{}`.'.format(nodename))
+    retry_operation(stop_vm, 1200, {400: 3, 403: 3, 409: 3})
+    env.application = app
 
 
-def do_reboot(env, client, nodename):
+def do_reboot(env, nodename):
     """Reboot the VM with name *nodename*."""
-    app, vm = get_app_vm_fail(env, client, nodename)
-    client.restart_vm(app, vm)
+    log = env.logger
+    app = env.application
+    is_retry = False
+    def stop_vm():
+        nonlocal app, is_retry
+        if is_retry:
+            app = env.client.call('GET', '/applications/{id}'.format(**app))
+        is_retry = True
+        vm = get_vm(app, nodename)
+        state = vm['state']
+        if state in ('STARTING', 'RESTARTING'):
+            return
+        if state == 'STOPPING':
+            raise Retry('Application in state `{}`'.format(state))
+        # STOPPED or STARTED
+        env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/restart'
+                                    .format(app=env.application, vm=vm))
+    log.debug('Rebooting vm `{}`.'.format(nodename))
+    retry_operation(stop_vm, 1200, {400: 3, 403: 3, 409: 3})
+    env.application = app
 
 
-def do_list_all(env, client):
+def do_list_all(env):
     """List all VMs, output to standard out."""
-    app = get_app_fail(env, client)
-    for vm in app.get('deployment', {}).get('vms', []):
+    for vm in ravello.get_vms(env.application):
         sys.stdout.write('{}\n'.format(vm['name']))
 
 
-def do_list_running(env, client):
+def do_list_running(env):
     """List all running VMs, output to standard out."""
-    app = get_app_fail(env, client)
-    for vm in app.get('deployment', {}).get('vms', []):
+    for vm in ravello.get_vms(env.application):
         # Due to an idiosyncracy in the ssh power driver in Ironic, this needs
         # to be a quoted list of VMs (unlike for list_all).
         if vm['state'] in ('STARTING', 'STARTED'):
             sys.stdout.write('"{}"\n'.format(vm['name']))
 
 
-def do_get_node_macs(env, client, nodename):
+def do_get_node_macs(env, nodename):
     """Return the macs for *nodename*, output to standard out."""
-    app, vm = get_app_vm_fail(env, client, nodename)
+    vm = get_vm(env.application, nodename)
     for conn in vm.get('networkConnections', []):
         device = conn.get('device', {})
         mac = device.get('mac')
         if mac is None:
             mac = device.get('generatedMac')
-        sys.stdout.write('{}\n'.format(mac.replace(':', '')))
+        if mac:
+            sys.stdout.write('{}\n'.format(mac.replace(':', '')))
 
 
-def _get_disk(vm):
+def get_disk(vm):
     """Return the hard drive for *vm*."""
     for drive in vm.get('hardDrives', []):
         if drive['type'] == 'DISK':
@@ -221,80 +324,61 @@ def _get_disk(vm):
     raise RuntimeError('VM {} does not have a DISK'.format(vm['name']))
 
 
-def do_get_boot_device(env, client, nodename):
+def do_get_boot_device(env, nodename):
     """Return the boot dervice for *nodename*."""
-    app, vm = get_app_vm_fail(env, client, nodename)
-    drive = _get_disk(vm)
-    return 'hd' if drive.get('boot') else 'network'
+    vm = get_vm(env.application, nodename)
+    drive = get_disk(vm)
+    print('hd' if drive.get('boot') else 'network')
 
 
-def do_set_boot_device(env, client, nodename, device):
+def do_set_boot_device(env, nodename, device):
     """Set the boot device for *nodename* to *device*."""
-    app, _ = get_app_vm_fail(env, client, nodename)
-    appid = app['id']
-    # The locking in Ironic is per VM, not per application. So there will be
-    # concurrent calls to set the boot device for mutiple VMs.
-    # Fortunately Ravello concurrent modifications by including a "version"
-    # key in the application.
-    # Due to a bug in Ravello, the "bootOrder" property is ignored. As a
-    # workaround we toggle the "boot" flag on the drive.
+    log = env.logger
+    app = env.application
+    is_retry = False
     def set_boot_device():
-        app = client.get_application(appid)
-        vm = _get_vm(app, nodename, 'design')
-        drive = _get_disk(vm)
+        nonlocal app, is_retry
+        if is_retry:
+            app = env.client.call('GET', '/applications/{id}'.format(**app))
+        is_retry = True
+        vm = get_vm(app, nodename)
+        state = vm['state']
+        if state in ('STARTING', 'STOPPING', 'RESTARTING'):
+            raise Retry('Application in state `{}`'.format(state))
+        vm = get_vm(app, nodename, 'design')
+        drive = get_disk(vm)
         drive['boot'] = bool(device == 'hd')
-        client.update_application(app)
-    _retry_operation(set_boot_device)
-    _retry_operation(lambda: client.publish_application_updates(appid))
+        env.client.call('PUT', '/applications/{id}'.format(**app), app)
+    log.debug('Setting boot device for node `{}` to `{}`'.format(nodename, device))
+    retry_operation(set_boot_device, 1200, {400: 3, 403: 3, 409: 3})
+    def publish_updates():
+        env.client.call('POST', '/applications/{id}/publishUpdates'.format(**app))
+    log.debug('Publishing updates for application `{name}`.'.format(**app))
+    retry_operation(publish_updates)
+    env.application = app
 
 
-def _main():
-    """The real main function."""
-    log = util.get_logger()
-    log.debug('New request, command = {}'.format(os.environ['SSH_ORIGINAL_COMMAND']))
+def run_main(env):
+    """The `raviron proxy-run` command."""
+    log = env.logger
+    log.debug('New request, command = {}'.format(os.environ.get('SSH_ORIGINAL_COMMAND', '?')))
 
-    env = get_ssh_environ()
-
-    cmdline = parse_virsh_command_line(env)
+    cmdline = parse_virsh_command_line()
     log.info('Parsed command: {}'.format(' '.join(cmdline)))
 
-    client = get_ravello_client(env)
-
     if cmdline[0] == 'start':
-        do_start(env, client, cmdline[1])
+        do_start(env, cmdline[1])
     elif cmdline[0] == 'stop':
-        do_stop(env, client, cmdline[1])
+        do_stop(env, cmdline[1])
     elif cmdline[0] == 'reboot':
-        do_reboot(env, client, cmdline[1])
+        do_reboot(env, cmdline[1])
     elif cmdline[0] == 'list_all':
-        do_list_all(env, client, )
+        do_list_all(env)
     elif cmdline[0] == 'list_running':
-        do_list_running(env, client, )
+        do_list_running(env)
     elif cmdline[0] == 'get_node_macs':
-        do_get_node_macs(env, client, cmdline[1])
+        do_get_node_macs(env, cmdline[1])
     elif cmdline[0] == 'get_boot_device':
-        do_get_boot_device(env, client, cmdline[1])
+        do_get_boot_device(env, cmdline[1])
     elif cmdline[0] == 'set_boot_device':
-        do_set_boot_device(env, client, cmdline[2], cmdline[1])
-    else:
-        raise AssertionError('unknown command: {}'.format(cmdline[0]))
-
-
-def main():
-    """Main wrapper function.
-
-    Calls _main() and handles any exceptions that might occur.
-    """
-    try:
-        _main()
-    except Exception as e:
-        log = util.get_logger()
-        log.error('Uncaught exception:', exc_info=True)
-        if util.get_debug():
-            raise
-        sys.stdout.write('Error: {!s}\n'.format(e))
-        sys.exit(1)
-
-
-if __name__ == '__main__':
-    main()
+        do_set_boot_device(env, cmdline[2], cmdline[1])
