@@ -150,4 +150,4 @@ def do_run(env):
     elif cmdline[0] == 'set_boot_device':
         node.do_set_boot_device(env, cmdline[2], cmdline[1])
     elif cmdline[0] == 'get_node_macs':
-        node.do_get_node_macs(env, cmdline[1], True)
+        node.do_get_macs(env, cmdline[1], True)
