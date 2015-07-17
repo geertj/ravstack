@@ -12,7 +12,7 @@ from setuptools import setup
 
 version_info = {
     'name': 'raviron',
-    'version': '0.9.1',
+    'version': '0.9.2',
     'description': 'OpenStack Ironic power control for Ravello Systems',
     'author': 'Geert Jansen',
     'author_email': 'geertj@gmail.com',
