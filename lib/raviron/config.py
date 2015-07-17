@@ -96,7 +96,7 @@ def dump_defaults():
         if env or arg:
             env = '$' + env if env else env
             print('# Also specified as {}'.format(' or '.join(filter(None, (env, arg)))))
-        print('{}{}={}'.format('' if required else '#', name, default))
+        print('{}{}={}\n'.format('' if required else '#', name, default))
 
 
 if __name__ == '__main__':
