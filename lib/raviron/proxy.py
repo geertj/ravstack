@@ -81,7 +81,7 @@ def install_proxy(pubkey, command):
 _key_name = 'id_raviron'
 _proxy_name = 'raviron-proxy'
 
-def create_main(env):
+def do_create(env):
     """The `raviron proxy-create` command."""
     keyname = env.config['proxy']['key_name']
     proxyname = env.config['proxy']['proxy_name']
