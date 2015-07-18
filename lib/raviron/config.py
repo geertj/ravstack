@@ -22,7 +22,7 @@ _default_config = [
             'Ravello API username.', 'RAVELLO_USERNAME', '--username'),
     ('ravello', 'password', '<None>', True,
             'Ravello API password.', 'RAVELLO_PASSWORD', '--password'),
-    ('ravello', 'application', '<None>', True,
+    ('ravello', 'application', '<None>', False,
             'Ravello application name.', 'RAVELLO_APPLICATION', '--application'),
     ('ravello', 'pxe_iso', 'ipxe.iso', False,
             'Name of PXE boot ISO image.', None, '--pxe-iso'),
