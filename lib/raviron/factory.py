@@ -101,12 +101,12 @@ def get_environ(args=None):
     cfg = config.parse_config()
     config.update_from_args(cfg, args)
     update_from_ravello_config(cfg)
+    if cfg['DEFAULT'].getboolean('debug'):
+        logging.set_debug()
+    if cfg['DEFAULT'].getboolean('verbose'):
+        logging.set_verbose()
     env.config = cfg
     env.args = args
-    if args['--debug']:
-        logging.set_debug()
-    if args['--verbose']:
-        logging.set_verbose()
     env.logger = logging.get_logger()
     env.client = get_ravello_client(env)
     env.application = get_ravello_application(env)

@@ -60,7 +60,7 @@ def parse_config():
 def update_from_args(config, args):
     """Update *config* with values specified in *args*."""
     for section, name, *skip, env, cli in _default_config:
-        if args.get(cli) is not None:
+        if args.get(cli) not in (None, False):
             config[section][name] = str(args[cli])
 
 
