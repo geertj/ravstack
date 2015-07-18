@@ -254,6 +254,10 @@ def do_dump(env):
     print('Wrote {} nodes to `{}`.'.format(len(nodes), nodes_file))
 
 
+# Ravello has six VM states. Mapping to Ironic power states:
+# STOPPING, STOPPED -> OFF
+# STARTING, STARTED, UPDATING, RESTARTING -> ON
+
 def do_list_running(env, virsh_format=False):
     """The `node-list command."""
     for node in env.nodes[1:]:
@@ -261,7 +265,7 @@ def do_list_running(env, virsh_format=False):
         if virsh_format:
             # Yes it needs quotes, unlike do_list_all().
             name = '"{}"'.format(name)
-        if node['state'] in ('STARTING', 'STARTED'):
+        if node['state'] not in ('STOPPING', 'STOPPED'):
             sys.stdout.write('{}\n'.format(name))
 
 
@@ -296,14 +300,21 @@ def do_start(env, nodename):
             vm = get_vm(app, nodename)
         is_retry = True
         vm = get_vm(app, nodename)
+        log.debug('Node `{name}` is in state `{state}`.'.format(**vm))
         state = vm['state']
-        if state in ('STARTED', 'STARTING', 'RESTARTING'):
-            return
-        if state == 'STOPPING':
+        # The semantics expected by Ironic are that a "start" in an ON power
+        # state will stop the node and then start it again.
+        if state in ('STARTING', 'STOPPING', 'RESTARTING'):
             raise Retry('Node in state `{}`'.format(state))
-        # STOPPED
-        env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/start'
-                                    .format(app=env.application, vm=vm))
+        # UPDATING only happens when the boot device was updated. This restarts
+        # the VM for us. So as a short-cut we don't require a power-off as that
+        # just happened.
+        if state == 'UPDATING':
+            return
+        # STARTED or STOPPED
+        action = 'start' if state == 'STOPPED' else 'restart'
+        env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/{action}'
+                                    .format(app=env.application, vm=vm, action=action))
     # According to the docs, 400 means the application is in the middle of
     # another action, but I get 409 instead.
     # Retry just 3 times in case of HTTP errors. Most of the times the code
@@ -311,7 +322,7 @@ def do_start(env, nodename):
     # call the start action if we know it will fail. The retries here are for
     # race conditions where someone else started up the VM concurrently. In the
     # next iteration, we should detect the updated state and exit cleanly.
-    log.debug('Starting vm `{}`.'.format(nodename))
+    log.debug('Starting node `{}`.'.format(nodename))
     retry_operation(start_vm, 1200, {400: 3, 403: 3, 409: 3})
     env.application = app
 
@@ -327,15 +338,16 @@ def do_stop(env, nodename):
             app = env.client.call('GET', '/applications/{id}'.format(**app))
         is_retry = True
         vm = get_vm(app, nodename)
+        log.debug('Node `{name}` is in state `{state}`.'.format(**vm))
         state = vm['state']
         if state in ('STOPPED', 'STOPPING'):
             return
-        if state in ('STARTING', 'RESTARTING'):
+        if state in ('STARTING', 'RESTARTING', 'UPDATING'):
             raise Retry('Node in state `{}`'.format(state))
         # STARTED
         env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/poweroff'
                                     .format(app=env.application, vm=vm))
-    log.debug('Stopping vm `{}`.'.format(nodename))
+    log.debug('Stopping node `{}`.'.format(nodename))
     retry_operation(stop_vm, 1200, {400: 3, 403: 3, 409: 3})
     env.application = app
 
@@ -351,15 +363,14 @@ def do_reboot(env, nodename):
             app = env.client.call('GET', '/applications/{id}'.format(**app))
         is_retry = True
         vm = get_vm(app, nodename)
+        log.debug('Node `{name}` is in state `{state}`.'.format(**vm))
         state = vm['state']
-        if state in ('STARTING', 'RESTARTING'):
-            return
-        if state == 'STOPPING':
+        if state in ('STARTING', 'STOPPING', 'RESTARTING', 'UPDATING'):
             raise Retry('Node in state `{}`'.format(state))
         # STOPPED or STARTED
         env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/restart'
                                     .format(app=env.application, vm=vm))
-    log.debug('Rebooting vm `{}`.'.format(nodename))
+    log.debug('Rebooting node `{}`.'.format(nodename))
     retry_operation(stop_vm, 1200, {400: 3, 403: 3, 409: 3})
     env.application = app
 
