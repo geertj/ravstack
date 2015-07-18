@@ -59,7 +59,7 @@ def get_logger():
     ssh_conn = os.environ.get('SSH_CONNECTION')
     if ssh_conn:
         parts = ssh_conn.split()
-        if parts[0] == '127.0.0.1':
+        if parts[0] in ('127.0.0.1', '::1'):
             parts[0] = ''
         template = _ssh_template.format(':'.join(parts[:2]))
     else:
