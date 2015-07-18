@@ -244,7 +244,7 @@ def do_dump(env):
                      'pm_password': privkey})
         nodes.append(node)
 
-    # Dump to ~/nodes.json
+    # Dump to the nodes file.
 
     nodes_file = env.config['nodes']['nodes_file']
     fname = os.path.expanduser(nodes_file)

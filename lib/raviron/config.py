@@ -30,7 +30,7 @@ _default_config = [
             'Minimum application runtime (in minutes).', None, None),
     ('proxy', 'key_name', 'id_raviron', False, 'Proxy SSH keypair name.', None, None),
     ('proxy', 'proxy_name', 'raviron-proxy', False, 'Proxy SSH keypair name.', None, None),
-    ('nodes', 'nodes_file', '~/nodes.json', False,
+    ('nodes', 'nodes_file', '~/instackenv.json', False,
             'Save node definition in this file.', None, '--output'),
 ]
 
