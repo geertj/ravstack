@@ -228,7 +228,8 @@ def do_dump(env):
 
     nodes = []
     for vm in env.nodes[1:]:
-        node = {'arch': 'x86_64',
+        node = {'name': vm['name'],
+                'arch': 'x86_64',
                 'cpu': str(vm['numCpus']),
                 'memory': str(ravello.convert_size(vm['memorySize'], 'MB')),
                 'disk': str(ravello.convert_size(vm['hardDrives'][0]['size'], 'GB'))}
@@ -271,7 +272,29 @@ def do_list_running(env, virsh_format=False):
 
 def do_list_all(env):
     """The `node-list --all` command."""
-    for node in env.nodes[1:]:
+    nodes_file = env.config['nodes']['nodes_file']
+    fname = os.path.expanduser(nodes_file)
+    # If we're called from the proxy try to use cached information from the
+    # nodes file. We take this approach for `node-list --all` and also for
+    # `get-node-macs` below. Ironic will refresh the power states for each node
+    # every minute or so. To find the name of a node, it will list all nodes,
+    # and then list the mac addresses for each node until it finds the node.
+    # This is very inefficient. Together these two calls account for about 75%
+    # of all API calls made by Ironic. It also causes problems because the node
+    # is locked by Ironic during these API calls and this sometimes causes
+    # exernal API clients to reach their maximum retry.
+    # The information for both API calls does not change unless someone first
+    # adds a node and then dumps the info to the nodes file, and then imports
+    # it in Ironic. So rather than contacting the API, we get the information
+    # from the nodes file directly, if it exists.
+    if env.args['--cached'] and util.try_stat(fname):
+        with open(fname) as fin:
+            nodes = json.loads(fin.read())['nodes']
+    else:
+        # This is computed on attribute access. So we are actually preventing
+        # the API calls if we don't access it.
+        nodes = env.nodes[1:]
+    for node in nodes:
         sys.stdout.write('{}\n'.format(node['name']))
 
 
@@ -411,15 +434,26 @@ def do_set_boot_device(env, nodename, device):
 
 def do_get_macs(env, nodename, virsh_format=False):
     """The `node-get-macs` command."""
-    vm = get_vm(env.application, nodename)
-    for conn in vm.get('networkConnections', []):
-        device = conn.get('device', {})
-        mac = device.get('mac')
-        if mac is None:
-            mac = device.get('generatedMac')
-        if not mac:
-            continue
+    nodes_file = env.config['nodes']['nodes_file']
+    fname = os.path.expanduser(nodes_file)
+    # See the note in do_list_all on why we're using cached information.
+    macs = []
+    if env.args['--cached'] and util.try_stat(fname):
+        with open(fname) as fin:
+            nodes = json.loads(fin.read())['nodes']
+        for node in nodes:
+            if node['name'] == nodename:
+                macs += node['mac']
+    else:
+        vm = get_vm(env.application, nodename)
+        for conn in vm.get('networkConnections', []):
+            device = conn.get('device', {})
+            mac = device.get('mac')
+            if mac is None:
+                mac = device.get('generatedMac')
+            if mac:
+                macs.append(mac)
+    for mac in macs:
         if virsh_format:
             mac = mac.replace(':', '')
-        if mac:
-            sys.stdout.write('{}\n'.format(mac))
+        sys.stdout.write('{}\n'.format(mac))

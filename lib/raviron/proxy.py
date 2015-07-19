@@ -135,6 +135,8 @@ def do_run(env):
     cmdline = parse_virsh_command_line()
     log.info('Parsed command: {}'.format(' '.join(cmdline)))
 
+    env.args['--cached'] = True
+
     if cmdline[0] == 'start':
         node.do_start(env, cmdline[1])
     elif cmdline[0] == 'stop':

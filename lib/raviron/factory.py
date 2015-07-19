@@ -16,6 +16,18 @@ from .util import inet_aton
 class Environment:
     """Environment used to pass per invocation variables."""
 
+    def __init__(self):
+        self._lazy = {}
+
+    def lazy_attr(self, name, factory):
+        self._lazy[name] = factory
+
+    def __getattr__(self, name):
+        if name not in self._lazy:
+            raise AttributeError('no such attribute: {!r}'.format(name))
+        setattr(self, name, self._lazy[name]())
+        return getattr(self, name)
+
 
 def update_from_ravello_config(cfg):
     """Update configuration from Ravello configuration in /etc/ravello/vm.json."""
@@ -108,8 +120,8 @@ def get_environ(args=None):
     env.config = cfg
     env.args = args
     env.logger = logging.get_logger()
-    env.client = get_ravello_client(env)
-    env.application = get_ravello_application(env)
-    env.nodes = get_nodes(env.application)
-    env.iso = get_pxe_iso(env)
+    env.lazy_attr('client', lambda: get_ravello_client(env))
+    env.lazy_attr('application', lambda: get_ravello_application(env))
+    env.lazy_attr('nodes', lambda: get_nodes(env.application))
+    env.lazy_attr('iso', lambda: get_pxe_iso(env))
     return env

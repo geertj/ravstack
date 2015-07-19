@@ -14,13 +14,13 @@ Usage:
   raviron [options] node-create [-c <cpus>] [-m <memory>]
                                 [-D <disk>] [-n <count>]
   raviron [options] node-dump [-o <file>]
-  raviron [options] node-list [--all]
+  raviron [options] node-list [--all [--cached]]
   raviron [options] node-start <node>
   raviron [options] node-stop <node>
   raviron [options] node-reboot <node>
   raviron [options] node-get-boot-device <node>
   raviron [options] node-set-boot-device <node> <bootdev>
-  raviron [options] node-get-macs <node>
+  raviron [options] node-get-macs <node> [--cached]
   raviron --help
 
 Command help:
@@ -47,6 +47,7 @@ Options:
   -a <application>, --application=<application>
                     The Ravello application name.
   --all             List all nodes.
+  --cached          Allow use of cached information.
 
 Options for `node-create`:
   -c <cpus>, --cpus=<cpus>
