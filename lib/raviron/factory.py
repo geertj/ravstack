@@ -9,8 +9,8 @@
 import json
 import copy
 
-from . import ravello, config, logging
-from .util import inet_aton
+from novaclient.v2 import client as nova_client
+from . import ravello, config, logging, util
 
 
 class Environment:
@@ -89,8 +89,8 @@ def get_nodes(app):
                 break
         if all_static:
             nodes.append(node)
-    nodes.sort(key=lambda vm: inet_aton(vm['networkConnections'][0]
-                                          ['ipConfig']['staticIpConfig']['ip']))
+    nodes.sort(key=lambda vm: util.inet_aton(vm['networkConnections'][0]
+                                               ['ipConfig']['staticIpConfig']['ip']))
     return nodes
 
 
@@ -102,6 +102,27 @@ def get_pxe_iso(env):
         if image['name'] == name:
             return image
     raise RuntimeError('PXE ISO `{}` not found.'.format(name))
+
+
+def get_env_under(env):
+    """Return the parsed environment file for the undercloud."""
+    fname = env.config['tripleo']['undercloud_env']
+    return util.parse_env_file(fname, '^OS_|_VERSION=')
+
+
+def get_env_over(env):
+    """Return the parsed environment file for the overcloud."""
+    fname = env.config['tripleo']['overcloud_env']
+    return util.parse_env_file(fname, '^OS_|_VERSION=')
+
+
+def get_nova_client(env):
+    """Return a nova client based on *env*."""
+    client = nova_client.Client(auth_url=env['OS_AUTH_URL'],
+                                username=env['OS_USERNAME'],
+                                api_key=env['OS_PASSWORD'],
+                                project_id=env['OS_TENANT_NAME'])
+    return client
 
 
 def get_environ(args=None):
@@ -117,11 +138,14 @@ def get_environ(args=None):
         logging.set_debug()
     if cfg['DEFAULT'].getboolean('verbose'):
         logging.set_verbose()
+    env.logger = logging.get_logger()
     env.config = cfg
     env.args = args
-    env.logger = logging.get_logger()
     env.lazy_attr('client', lambda: get_ravello_client(env))
     env.lazy_attr('application', lambda: get_ravello_application(env))
     env.lazy_attr('nodes', lambda: get_nodes(env.application))
     env.lazy_attr('iso', lambda: get_pxe_iso(env))
+    env.lazy_attr('env_under', lambda: get_env_under(env))
+    env.lazy_attr('env_over', lambda: get_env_over(env))
+    env.lazy_attr('nova_under', lambda: get_nova_client(env.env_under))
     return env

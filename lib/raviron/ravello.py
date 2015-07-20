@@ -6,8 +6,20 @@
 # Copyright (c) 2015 the Raviron authors. See the file "AUTHORS" for a
 # complete list.
 
+import time
+import logging
+import random
+
 from requests import Session, HTTPError
 from requests.adapters import HTTPAdapter
+
+
+magic_svm_cpuids = [
+    {"index": "0", "value": "0000000768747541444d416369746e65"},
+    {"index": "1", "value": "000006fb00000800c0802000078bfbfd"},
+    {"index": "8000000a", "value": "00000001000000400000000000000089"},
+    {"index": "80000000", "value": "8000000a000000000000000000000000"},
+    {"index": "80000001", "value": "00000000000000000000001520100800"}, ]
 
 
 class RavelloApi(Session):
@@ -76,6 +88,55 @@ class RavelloApi(Session):
         return r.json()
 
 
+class Retry(RuntimeError):
+    """Exception used to indicate to retry_operation() that it needs to
+    retry."""
+
+
+_default_retries = {409: 10}
+
+def retry_operation(func, timeout=60, retries=None):
+    """Retry an operation on various 4xx errors."""
+    log = logging.getLogger(__name__)
+    end_time = time.time() + timeout
+    tries = {}
+    if retries is None:
+        retries = _default_retries
+    count = 0
+    delay = min(10, max(2, timeout/100))
+    start_time = time.time()
+    while end_time > time.time():
+        count += 1
+        try:
+            func()
+        except HTTPError as e:
+            status = e.response.status_code
+            if status not in retries:
+                raise
+            log.debug('Retry: {!s}'.format(e))
+            tries.setdefault(status, 0)
+            tries[status] += 1
+            if not 0 < tries[status] < retries[status]:
+                log.error('Max retries reached for status {} ({})'
+                                .format(status, retries[status]))
+                raise
+            log.warning('Retry number {} out of {} for status {}.'
+                            .format(tries[status], retries[status], status))
+        except Retry as e:
+            log.warning('Retry requested: {}.'.format(e))
+        else:
+            time_spent = time.time() - start_time
+            log.debug('Operation succeeded after {} attempt{} ({:.2f} seconds).'
+                            .format(count, 's' if count > 1 else '', time_spent))
+            return
+        loop_delay = delay + random.random()
+        log.debug('Sleeping for {:.2f} seconds.'.format(loop_delay))
+        time.sleep(loop_delay)
+    time_spent = time.time() - start_time
+    raise RuntimeError('Timeout retrying function `{.__name__}` ({:.2f} seconds).'
+                        .format(func, time_spent))
+
+
 def simple_filter(**kwargs):
     """Return a simple filter that requires all keyword arguments to be equal
     to their specified value."""
@@ -96,3 +157,44 @@ def convert_size(size, unit):
 def get_vms(app, scope='deployment'):
     """Return the VMs in an application."""
     return app.get(scope, {}).get('vms', [])
+
+
+def get_network(vm, ip):
+    """Return the network with an IP *ip*."""
+    for conn in vm.get('networkConnections', []):
+        if get_ip(conn) == ip:
+            return conn
+
+
+def get_ip(conn):
+    """Return the primary IP of a network connection."""
+    ipcfg = conn.get('ipConfig')
+    if not ipcfg:
+        return
+    stcfg = ipcfg.get('staticIpConfig')
+    aucfg = ipcfg.get('autoIpConfig')
+    if stcfg:
+        return stcfg.get('ip')
+    elif aucfg:
+        ip = aucfg.get('allocatedIp')
+        if ip is None:
+            ip = aucfg.get('reservedIp')
+        return ip
+
+
+def get_mac(conn):
+    """Return the Mac address for a network connection."""
+    dev = conn.get('device')
+    if dev is None:
+        return
+    mac = dev.get('mac')
+    if mac is None:
+        mac = dev.get('generatedMac')
+    return mac
+
+
+def get_service(vm, port):
+    """Return the service for a given port."""
+    for service in vm.get('suppliedServices', []):
+        if service['portRange'] == port:
+            return service

@@ -10,67 +10,10 @@ import os
 import sys
 import json
 import time
-import random
 
-from . import util, ravello, logging
+from . import util, ravello
 from .util import inet_aton, inet_ntoa
-
-
-_magic_svm_cpuids = [
-    {"index": "0", "value": "0000000768747541444d416369746e65"},
-    {"index": "1", "value": "000006fb00000800c0802000078bfbfd"},
-    {"index": "8000000a", "value": "00000001000000400000000000000089"},
-    {"index": "80000000", "value": "8000000a000000000000000000000000"},
-    {"index": "80000001", "value": "00000000000000000000001520100800"}, ]
-
-
-class Retry(RuntimeError):
-    """Exception used to indicate to retry_operation() that it needs to
-    retry."""
-
-
-_default_retries = {409: 10}
-
-def retry_operation(func, timeout=60, retries=None):
-    """Retry an operation on various 4xx errors."""
-    log = logging.get_logger()
-    end_time = time.time() + timeout
-    tries = {}
-    if retries is None:
-        retries = _default_retries
-    count = 0
-    delay = min(10, max(2, timeout/100))
-    start_time = time.time()
-    while end_time > time.time():
-        count += 1
-        try:
-            func()
-        except ravello.HTTPError as e:
-            status = e.response.status_code
-            if status not in retries:
-                raise
-            log.debug('Retry: {!s}'.format(e))
-            tries.setdefault(status, 0)
-            tries[status] += 1
-            if not 0 < tries[status] < retries[status]:
-                log.error('Max retries reached for status {} ({})'
-                                .format(status, retries[status]))
-                raise
-            log.warning('Retry number {} out of {} for status {}.'
-                            .format(tries[status], retries[status], status))
-        except Retry as e:
-            log.warning('Retry requested: {}.'.format(e))
-        else:
-            time_spent = time.time() - start_time
-            log.debug('Operation succeeded after {} attempt{} ({:.2f} seconds).'
-                            .format(count, 's' if count > 1 else '', time_spent))
-            return
-        loop_delay = delay + random.random()
-        log.debug('Sleeping for {:.2f} seconds.'.format(loop_delay))
-        time.sleep(loop_delay)
-    time_spent = time.time() - start_time
-    raise RuntimeError('Timeout retrying function `{.__name__}` ({:.2f} seconds).'
-                        .format(func, time_spent))
+from .ravello import retry_operation
 
 
 def get_vm(app, nodename, scope='deployment'):
@@ -112,7 +55,7 @@ def create_node(env, new_name):
             'numCpus': env.args['--cpus'],
             'memorySize': {'value': env.args['--memory'], 'unit': 'MB'},
             'stopTimeOut': 180,
-            'cpuIds': _magic_svm_cpuids}
+            'cpuIds': ravello.magic_svm_cpuids}
 
     # disk drives
     drives = node['hardDrives'] = []
@@ -235,10 +178,9 @@ def do_dump(env):
                 'disk': str(ravello.convert_size(vm['hardDrives'][0]['size'], 'GB'))}
         macs = node['mac'] = []
         for nic in vm['networkConnections']:
-            mac = nic['device'].get('mac')
-            if mac is None:
-                mac = nic['device']['generatedMac']
-            macs.append(mac)
+            mac = ravello.get_mac(nic)
+            if mac:
+                macs.append(mac)
         node.update({'pm_type': 'pxe_ssh',
                      'pm_addr': 'localhost',
                      'pm_user': util.get_user(),
@@ -247,7 +189,7 @@ def do_dump(env):
 
     # Dump to the nodes file.
 
-    nodes_file = env.config['nodes']['nodes_file']
+    nodes_file = env.config['tripleo']['nodes_file']
     fname = os.path.expanduser(nodes_file)
     with open(fname, 'w') as fout:
         fout.write(json.dumps({'nodes': nodes}, sort_keys=True, indent=2))
@@ -272,7 +214,7 @@ def do_list_running(env, virsh_format=False):
 
 def do_list_all(env):
     """The `node-list --all` command."""
-    nodes_file = env.config['nodes']['nodes_file']
+    nodes_file = env.config['tripleo']['nodes_file']
     fname = os.path.expanduser(nodes_file)
     # If we're called from the proxy try to use cached information from the
     # nodes file. We take this approach for `node-list --all` and also for
@@ -328,7 +270,7 @@ def do_start(env, nodename):
         # The semantics expected by Ironic are that a "start" in an ON power
         # state will stop the node and then start it again.
         if state in ('STARTING', 'STOPPING', 'RESTARTING'):
-            raise Retry('Node in state `{}`'.format(state))
+            raise ravello.Retry('Node in state `{}`'.format(state))
         # UPDATING only happens when the boot device was updated. This restarts
         # the VM for us. So as a short-cut we don't require a power-off as that
         # just happened.
@@ -366,7 +308,7 @@ def do_stop(env, nodename):
         if state in ('STOPPED', 'STOPPING'):
             return
         if state in ('STARTING', 'RESTARTING', 'UPDATING'):
-            raise Retry('Node in state `{}`'.format(state))
+            raise ravello.Retry('Node in state `{}`'.format(state))
         # STARTED
         env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/poweroff'
                                     .format(app=env.application, vm=vm))
@@ -389,7 +331,7 @@ def do_reboot(env, nodename):
         log.debug('Node `{name}` is in state `{state}`.'.format(**vm))
         state = vm['state']
         if state in ('STARTING', 'STOPPING', 'RESTARTING', 'UPDATING'):
-            raise Retry('Node in state `{}`'.format(state))
+            raise ravello.Retry('Node in state `{}`'.format(state))
         # STOPPED or STARTED
         env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/restart'
                                     .format(app=env.application, vm=vm))
@@ -418,7 +360,7 @@ def do_set_boot_device(env, nodename, device):
         vm = get_vm(app, nodename)
         state = vm['state']
         if state in ('STARTING', 'STOPPING', 'RESTARTING'):
-            raise Retry('Node in state `{}`'.format(state))
+            raise ravello.Retry('Node in state `{}`'.format(state))
         vm = get_vm(app, nodename, 'design')
         drive = get_disk(vm)
         drive['boot'] = bool(device == 'hd')
@@ -434,7 +376,7 @@ def do_set_boot_device(env, nodename, device):
 
 def do_get_macs(env, nodename, virsh_format=False):
     """The `node-get-macs` command."""
-    nodes_file = env.config['nodes']['nodes_file']
+    nodes_file = env.config['tripleo']['nodes_file']
     fname = os.path.expanduser(nodes_file)
     # See the note in do_list_all on why we're using cached information.
     macs = []
@@ -447,10 +389,7 @@ def do_get_macs(env, nodename, virsh_format=False):
     else:
         vm = get_vm(env.application, nodename)
         for conn in vm.get('networkConnections', []):
-            device = conn.get('device', {})
-            mac = device.get('mac')
-            if mac is None:
-                mac = device.get('generatedMac')
+            mac = ravello.get_mac(conn)
             if mac:
                 macs.append(mac)
     for mac in macs:

@@ -30,8 +30,16 @@ _default_config = [
             'Minimum application runtime (in minutes).', None, None),
     ('proxy', 'key_name', 'id_raviron', False, 'Proxy SSH keypair name.', None, None),
     ('proxy', 'proxy_name', 'raviron-proxy', False, 'Proxy SSH keypair name.', None, None),
-    ('nodes', 'nodes_file', '~/instackenv.json', False,
-            'Save node definition in this file.', None, '--output'),
+    ('tripleo', 'nodes_file', '~/instackenv.json', False,
+            'File name containing node definitions.', None, None),
+    ('tripleo', 'undercloud_env', '~/stackrc', False, 'Undercloud rc file.', None, None),
+    ('tripleo', 'overcloud_env', '~/overcloudrc', False, 'Overcloud rc file.', None, None),
+    ('tripleo', 'controller_name', 'controller', False,
+            'Name uniquely identifying a controller node.', None, None),
+    ('tripleo', 'compute_name', 'novacompute', False,
+            'Name uniquely identifying a Nova compute node.', None, None),
+    ('tripleo', 'ssh_user', 'heat-admin', False,
+            'Name for ssh user to login to nodes.', None, None),
 ]
 
 

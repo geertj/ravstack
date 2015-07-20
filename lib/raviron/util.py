@@ -11,6 +11,8 @@ import pwd
 import errno
 import socket
 import struct
+import subprocess
+import locale
 import re
 
 
@@ -69,6 +71,15 @@ def mask_dict(d, *names):
     return m
 
 
+def filter_dict(d, *keys):
+    """Filter keys from a dictionary."""
+    f = {}
+    for k, v in d.items():
+        if k in keys:
+            f[k] = v
+    return f
+
+
 _re_field = re.compile(r'\{[^}]*\}')
 
 def unique_name_seqno(template, names):
@@ -92,3 +103,25 @@ def inet_ntoa(i):
     """Like `socket.inet_nota()` but accepts an int."""
     packed = struct.pack('!I', i)
     return socket.inet_ntoa(packed)
+
+
+def parse_env_file(filename, pattern):
+    """Source a shell script and extract variables from it."""
+    # Use the shell to parse this so we can also read substitutions
+    # like $() for example.
+    env = {}
+    command = 'source {}; set | grep -E "{}"'.format(filename, pattern)
+    output = subprocess.check_output(['sh', '-c', command])
+    output = output.decode(locale.getpreferredencoding())
+    for line in output.splitlines():
+        p1 = line.find('=')
+        env[line[:p1]] = line[p1+1:]
+    return env
+
+
+def run_ssh(addr, command, input=''):
+    """Run a command over SSH and return the output."""
+    encoding = locale.getpreferredencoding()
+    output = subprocess.check_output(['ssh', '-T', '-o', 'StrictHostKeyChecking=no',
+                                      addr, command], input=input.encode(encoding))
+    return output.decode(encoding)

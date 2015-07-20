@@ -13,7 +13,7 @@ Usage:
   raviron [options] proxy-run
   raviron [options] node-create [-c <cpus>] [-m <memory>]
                                 [-D <disk>] [-n <count>]
-  raviron [options] node-dump [-o <file>]
+  raviron [options] node-dump
   raviron [options] node-list [--all [--cached]]
   raviron [options] node-start <node>
   raviron [options] node-stop <node>
@@ -21,6 +21,8 @@ Usage:
   raviron [options] node-get-boot-device <node>
   raviron [options] node-set-boot-device <node> <bootdev>
   raviron [options] node-get-macs <node> [--cached]
+  raviron [options] fixup-network
+  raviron [options] fixup-nodes
   raviron --help
 
 Command help:
@@ -36,6 +38,11 @@ Command help:
   node-set-boot-device  Set boot device for <node> to <bootdev>.
                         The boot device may be "hd" or "network".
   node-get-macs         Return MAC addresses for <node>.
+  fixup-network         Fix Ravello network settings after one or
+                        more nodes were deployed.
+  fixup-nodes           Fix on-node settings after they were deployed
+                        or network settings have changed.
+                        NOTE: run this command *after* fixup-network!
 
 Options:
   -d, --debug       Enable debugging.
@@ -58,16 +65,12 @@ Options for `node-create`:
                     The size of the disk in GB. [default: 60]
   -n <count>, --count=<count>
                     The number of nodes to create. [default: 1]
-
-Options for `node-sync`:
-  -o <file>, --output=<file>
-                    Save node definition to this file.
 """
 
 import sys
 import docopt
 
-from . import proxy, node, logging, factory
+from . import proxy, node, fixup, logging, factory
 
 
 def _main():
@@ -99,6 +102,10 @@ def _main():
         node.do_set_boot_device(env, args['<node>'], args['<bootdev>'])
     elif args['node-get-macs']:
         node.do_get_macs(env, args['<node>'], False)
+    elif args['fixup-network']:
+        fixup.do_network(env)
+    elif args['fixup-nodes']:
+        fixup.do_nodes(env)
 
 
 def main():
