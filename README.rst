@@ -1,162 +1,107 @@
-Raviron - RDO-Manager and OpenStack Ironic in Ravello
-=====================================================
+Ravstack - Run OpenStack on Ravello
+===================================
 
-Raviron provides a power control driver for `OpenStack Ironic`_ for `Ravello
-Systems`_. 
+Ravstack provides a set of utilities that make it easy to run OpenStack on
+`Ravello Systems`_. It provides for the following:
 
-The main use case for Raviron is to allow you to use RDO-Manager_ to install a
-"bare metal" RDO_ OpenStack in Ravello. While Raviron should work with any
-OpenStack Ironic version, we will assume that you will be using the one
-provided by RDO-Manager
+* Ironic_ power control driver for Ravello.
+* Commands to create new "virtual bare metal" nodes and create an RDO-Manager_
+  compatible ``instackenv.json`` file for them.
+* Commands to do post-install fixups of networking settings.
+
+Ravstack has been designed to work together with RDO-Manager. Other TripleO_
+distributions might work as well with some configuration, but are not tested.
+The Ironic power driver should work with any recent version of Ironic.
 
 Installing RDO-Manager
 ----------------------
 
-The first step is to install RDO-Manager it in Ravello. You can use one of two
-approaches:
+The hard way to use ravstack is to install a new RDO-Manager from scratch as
+per the `installation instructions`_. You then install ravstack on the
+RDO-Manager using::
 
-* Upload a CentOS 7 `cloud image` in Ravello, create a new VM from it, and then
-  use the RDO-Manager `installation instructions`_.
-* (the easy way) Copy a pre-installed RDO-Manager VM from the `Ravello Repo`_
-  (TBD).
+  $ sudo pip3 install ravstack
 
-Installing Raviron
-------------------
+Note that you need to have a working Python3 environment. Ravstack does not
+work with Python 2.x. The easiest is to use the one from EPEL_.
 
-It is recommended to install Raviron on the RDO-Manager VM. This is not
-strictly required but there is no reason to run it elsewhere.
+The recommended way however is to download an already pre-configured undercloud
+image from the `Ravello Repo`_. The image contains an installed RDO-Manager
+with configured bare metal images and has ravstack installed pre-configured.
+It will save you a few hours of work. This installation method is what we will
+assume for the rest of this document.
 
-First you need to install EPEL and Python 3.4::
+Installing From the Ravello Repo
+--------------------------------
 
-  $ sudo yum install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
-  $ sudo yum install python34
+First step is to get the required images and create a new Ravello application:
 
-Now you need to install Raviron. It is recommended to install it in the "stack"
-account::
+* Go to the `ManageIQ Repo`_ page on Ravello Repo.
+* Copy the VM named "RDO Manager" into your account.
+* Copy the ISO named "ipxe.iso" into your account.
+* Create a new application.
+* Add the RDO Manager VM to it from the library.
+* Give the VM a shorter, easier name (I suggest "under").
+* Configure an SSH keypair for the VM.
+* Publish the application.
 
-  $ sudo pip install raviron
-  $ sudo mkdir /etc/raviron
-  $ python -mraviron.config | sudo cat > /etc/raviron/raviron.conf
-  $ sudo mkdir /var/log/raviron
-  $ sudo chown stack.stack /var/log/raviron
+Once the VM is up and running, log on via SSH as the "stack" user, and edit the
+file ``/etc/ravstack/ravstack.conf``. Change the ``username`` and ``password``
+settings to match your Ravello username and password. Ravstack needs access to
+your account so that it can create new nodes and perform power control
+operations.
 
-You may also install raviron in a virtualenv. This is useful for debugging
-purposes::
+Once this is done, create the nodes and add them to Ironic::
 
-  $ pyvenv venv
-  $ . venv/bin/activate
-  (venv) $ pip install raviron
-  (venv) $ python -mraviron.config > $VIRTUAL_ENV/raviron.conf
-  (venv) $ # Log file will be $VIRTUAL_ENV/raviron.log
+  $ ravstack node-create -n 3
+  Created 3 nodes: node1, node2, node3.
+  $ ravstack node-dump
+  Wrote 3 nodes to `~/instackenv.json`.
+  $ source ~/.stackrc
+  $ openstack baremetal import --json instackenv.json
+  $ openstack baremetal configure boot
+  $ openstack baremetal introspection bulk start
 
-After this edit the configuration file that you created above. You need to set
-at least the following variables:
+We are now ready to deploy the overcloud. The following command may take up to
+an hour to complete::
 
-* ``username`` - Your Ravello login name (email address).
-* ``password`` - Your Ravello password.
-* ``application`` - The Ravello application that you'll be using.
-* ``pxe_iso`` - The name of an ISO to be used for PXE booting. It is
-  recommended you use iPXE. You can download the latest version from
-  the ipxe.org web site and upload it to Ravello, or you may copy it from the
-  `Ravello Repo`_
+  $ openstack overcloud deploy --plan overcloud
 
-Creating the Proxy
-------------------
+After the installation is done, you should the overcloud in a state of
+"CREATE_COMPLETE"::
 
-Raviron is executed by the "ssh" power driver from Ironic. The setup involves
-an SSH keypair of which the public key is added to ``~/.ssh/authorized_keys``.
-The key is bound the raviron API proxy using the ``command=`` option on the
-public key. When executed by the "ssh" power driver, the API proxy will
-interpret the various "virsh" commands  translate them to the respective
-Ravello API calls.
+  $ heat stack-list
 
-To install the SSH key and the proxy, execute::
+Two post install steps are required. This will fixup the Ravello networking
+settings to reflect the DHCP addresses allocated to the bare metal nodes. It
+will also create public services for the overcloud Horizon and VNC proxy, and
+configure the public IP endpoints of these on the nodes. Note that you must run
+these commands in the order given here::
 
-  $ raviron proxy-create
-  Private key created as: ~/.ssh/id_raviron
-  Proxy created at: ~/bin/raviron-proxy
+  $ ravstack fixup-network
+  $ ravstack fixup-nodes
 
-This setup is only required once per system.
+That's it! You now have a working under- and overcloud.
 
-Creating Nodes
---------------
-
-Raviron can create new nodes for you that you can use with RDO-Manager. To
-create nodes, repeat the following command as many times as needed::
-
-  $ raviron node-create
-
-By default, a node with 2 processors, 8GB of RAM and a 60GB disk is created.
-You can override these defaults on the command line. The nodes are enabled for
-PXE booting by inserting the PXE boot ISO that you specified in the
-configuration file.
-
-The nodes are created with the same number of NICs as the RDO-Manager VM, and
-they are connected to the same networks.
-
-After you have created all nodes, issue the following command::
-
-  $ raviron node-sync
-  Wrote 4 nodes to `~/nodes.json`.
-
-The ``nodes.json`` file contain the hardware details for all the nodes. This
-file can be imported into RDO-Manager::
-
-  $ openstack baremetal import --json nodes.json
-
-You are now ready to deploy start installing RDO!
-
-Testing Raviron
----------------
-
-You can test raviron in two ways.
-
-**Testing through ssh**
-
-You can access the control functions provided by raviron through the SSH
-proxy::
-
-  $ ssh-add -i ~/.ssh/id_raviron
-  $ ssh localhost virsh list --all
-  under
-  node1
-  node2
-  node3
-  $ ssh localhost virsh start node1
-  $ ssh localhost virsh list --all running
-  "node1"
-
-Note that the "virsh" commands here are not real virsh commands. These commands
-correspond to the specific subset of commands used by the Ironic ssh/virsh
-power driver. They are recognized by the raviron proxy and translated to
-Ravello API calls.
-
-**Testing through ironic**
-
-You can also test raviron through Ironic::
-
-  $ . ~/stackrc
-  $ ironic node-list
-  $ ironic node-set-power-state node1 on
-
-Installing RDO
---------------
-
-Once you have tested that power control works for your nodes, you can follow
-the `Basic Deployment`_ section from the RDO-Manager manual to create an
-OpenStack installation.
+* To access the undercloud from the CLI, source the file ``~/stackrc`` on the
+  undercloud VM, and use any of the available OpenStack commands.
+* To access the undercloud from Horizon, got to the Ravello web UI and open the
+  "http" server on the "under" VM.
+* To access the Overcloud from the CLI, source the file ``~/overcloudrc`` on
+  the undercloud VM, and use any of the available OpenStack commands.
+* To access the Overcloud Horizon, go to the Ravello web UI, and open the
+  "http" service on the "controller-1" VM.
 
 Comments
 --------
 
-Feel free to report issues on github or mail me at geertj@gmail.com.
+Feel free to report issues on Github or mail me at geertj@gmail.com.
 
 .. _Ravello Systems: http://www.ravellosystems.com/
-.. _OpenStack Ironic: https://wiki.openstack.org/wiki/Ironic
-.. _RDO: https://www.rdoproject.org/
+.. _Ironic: https://wiki.openstack.org/wiki/Ironic
 .. _RDO-Manager: https://www.rdoproject.org/RDO-Manager
-.. _EPEL: https://fedoraproject.org/wiki/EPEL
-.. _Ravello Repo: http://www.ravellosystems.com/repo/profile/public/manageiq
-.. _cloud image: http://cloud.centos.org/centos/7/images
+.. _TripleO: https://wiki.openstack.org/wiki/TripleO
 .. _installation instructions: https://repos.fedorapeople.org/repos/openstack-m/docs/master/
-.. _Basic Deployment: https://repos.fedorapeople.org/repos/openstack-m/docs/master/basic_deployment/basic_deployment.html
+.. _EPEL: https://fedoraproject.org/wiki/EPEL
+.. _Ravello Repo: http://www.ravellosystems.com/repo
+.. _ManageIQ Repo: https://www.ravellosystems.com/repo/profile/public/manageiq

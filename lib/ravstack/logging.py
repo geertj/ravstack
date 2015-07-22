@@ -1,9 +1,9 @@
 #
-# This file is part of Raviron. Raviron is free software available under
+# This file is part of ravstack. Ravstack is free software available under
 # the terms of the MIT license. See the file "LICENSE" that was provided
 # together with this source file for the licensing terms.
 #
-# Copyright (c) 2015 the Raviron authors. See the file "AUTHORS" for a
+# Copyright (c) 2015 the ravstack authors. See the file "AUTHORS" for a
 # complete list.
 
 import os
@@ -12,7 +12,8 @@ import logging
 
 from . import util
 
-_log_name = 'raviron.log'
+_log_dir = '/var/log/ravstack'
+_log_name = 'ravstack.log'
 
 
 def get_debug():
@@ -41,7 +42,7 @@ def get_log_file():
         if util.can_open(logfile, 'a'):
             return logfile
     # Now try /var/log
-    logfile = os.path.join('/var/log/raviron', _log_name)
+    logfile = os.path.join(_log_dir, _log_name)
     if util.can_open(logfile, 'a'):
         return logfile
 
@@ -52,7 +53,7 @@ _ssh_template = '%(asctime)s %(levelname)s [{}] [%(name)s] %(message)s'
 def get_logger():
     """Set up logging."""
     root = logging.getLogger()
-    logger = logging.getLogger('raviron')
+    logger = logging.getLogger('ravstack')
     if root.handlers:
         return logger
     # If running under SSH, show connection information (for debugging)

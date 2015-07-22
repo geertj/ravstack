@@ -1,9 +1,9 @@
 #
-# This file is part of Raviron. Raviron is free software available under
+# This file is part of ravstack. Ravstack is free software available under
 # the terms of the MIT license. See the file "LICENSE" that was provided
 # together with this source file for the licensing terms.
 #
-# Copyright (c) 2015 the Raviron authors. See the file "AUTHORS" for a
+# Copyright (c) 2015 the ravstack authors. See the file "AUTHORS" for a
 # complete list.
 
 import os
@@ -11,12 +11,12 @@ from setuptools import setup
 
 
 version_info = {
-    'name': 'raviron',
-    'version': '0.9.5',
-    'description': 'OpenStack Ironic power control for Ravello Systems',
+    'name': 'ravstack',
+    'version': '0.9.6',
+    'description': 'Run OpenStack on Ravello',
     'author': 'Geert Jansen',
     'author_email': 'geertj@gmail.com',
-    'url': 'https://github.com/geertj/raviron',
+    'url': 'https://github.com/geertj/ravstack',
     'license': 'MIT',
     'classifiers': [
         'Development Status :: 4 - Beta',
@@ -41,8 +41,8 @@ def get_requirements():
 
 if __name__ == '__main__':
     setup(
-        packages=['raviron'],
+        packages=['ravstack'],
         package_dir={'': 'lib'},
         install_requires=get_requirements(),
-        entry_points={'console_scripts': ['raviron = raviron.main:main']},
+        entry_points={'console_scripts': ['ravstack = ravstack.main:main']},
         **version_info)

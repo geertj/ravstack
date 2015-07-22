@@ -2,30 +2,54 @@
 # Enable debugging.
 # Also specified as $DEBUG or --debug
 #debug=False
+
 # Be verbose (shows logging on stdout).
 # Also specified as $VERBOSE or --verbose
 #verbose=False
+
 [ravello]
 # Ravello API username. [required]
 # Also specified as $RAVELLO_USERNAME or --username
 username=<None>
+
 # Ravello API password. [required]
 # Also specified as $RAVELLO_PASSWORD or --password
 password=<None>
-# Ravello application name. [required]
+
+# Ravello application name.
 # Also specified as $RAVELLO_APPLICATION or --application
-application=<None>
+#application=<None>
+
 # Name of PXE boot ISO image.
 # Also specified as --pxe-iso
 #pxe_iso=ipxe.iso
+
 # Minimum application runtime (in minutes).
 #min_runtime=120
+
 [proxy]
-# Proxy SSH keypair name.
-#key_name=id_raviron
-# Proxy SSH keypair name.
-#proxy_name=raviron-proxy
-[nodes]
-# Save node definition in this file.
-# Also specified as --output
-#nodes_file=~/nodes.json
+# API Proxy keypair name.
+#key_name=id_ravstack
+
+# API proxy script.
+#proxy_name=~/bin/ironic-proxy
+
+[tripleo]
+# File name containing node definitions.
+#nodes_file=~/instackenv.json
+
+# Undercloud rc file.
+#undercloud_env=~/stackrc
+
+# Overcloud rc file.
+#overcloud_env=~/overcloudrc
+
+# Name uniquely identifying a controller node.
+#controller_name=controller
+
+# Name uniquely identifying a Nova compute node.
+#compute_name=novacompute
+
+# Name for ssh user to login to nodes.
+#ssh_user=heat-admin
+

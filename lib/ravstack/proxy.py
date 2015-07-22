@@ -1,9 +1,9 @@
 #
-# This file is part of raviron. Raviron is free software available under
+# This file is part of ravstack. Ravstack is free software available under
 # the terms of the MIT license. See the file "LICENSE" that was provided
 # together with this source file for the licensing terms.
 #
-# Copyright (c) 2015 the raviron authors. See the file "AUTHORS" for a
+# Copyright (c) 2015 the ravstack authors. See the file "AUTHORS" for a
 # complete list.
 
 import re
@@ -56,7 +56,7 @@ def create_proxy(proxyname):
             #!/bin/sh
             {}
             {}
-            exec raviron proxy-run
+            exec ravstack proxy-run
             """).format(enable_scls, enable_venv)
     with open(proxyfile, 'w') as fout:
         fout.write(contents)
@@ -78,11 +78,8 @@ def install_proxy(pubkey, command):
     os.chmod(authfile, 0o600)
 
 
-_key_name = 'id_raviron'
-_proxy_name = 'raviron-proxy'
-
 def do_create(env):
-    """The `raviron proxy-create` command."""
+    """The `ravstack proxy-create` command."""
     keyname = env.config['proxy']['key_name']
     proxyname = env.config['proxy']['proxy_name']
     keyfile = create_ssh_keypair(keyname, proxyname)

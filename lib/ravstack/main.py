@@ -1,29 +1,29 @@
 #
-# This file is part of Raviron. Raviron is free software available under
+# This file is part of ravstack. Ravstack is free software available under
 # the terms of the MIT license. See the file "LICENSE" that was provided
 # together with this source file for the licensing terms.
 #
-# Copyright (c) 2015 the Raviron authors. See the file "AUTHORS" for a
+# Copyright (c) 2015 the ravstack authors. See the file "AUTHORS" for a
 # complete list.
 
 """Ravello Ironic command-line utility.
 
 Usage:
-  raviron [options] proxy-create
-  raviron [options] proxy-run
-  raviron [options] node-create [-c <cpus>] [-m <memory>]
+  ravstack [options] proxy-create
+  ravstack [options] proxy-run
+  ravstack [options] node-create [-c <cpus>] [-m <memory>]
                                 [-D <disk>] [-n <count>]
-  raviron [options] node-dump
-  raviron [options] node-list [--all [--cached]]
-  raviron [options] node-start <node>
-  raviron [options] node-stop <node>
-  raviron [options] node-reboot <node>
-  raviron [options] node-get-boot-device <node>
-  raviron [options] node-set-boot-device <node> <bootdev>
-  raviron [options] node-get-macs <node> [--cached]
-  raviron [options] fixup-network
-  raviron [options] fixup-nodes
-  raviron --help
+  ravstack [options] node-dump
+  ravstack [options] node-list [--all [--cached]]
+  ravstack [options] node-start <node>
+  ravstack [options] node-stop <node>
+  ravstack [options] node-reboot <node>
+  ravstack [options] node-get-boot-device <node>
+  ravstack [options] node-set-boot-device <node> <bootdev>
+  ravstack [options] node-get-macs <node> [--cached]
+  ravstack [options] fixup-network
+  ravstack [options] fixup-nodes
+  ravstack --help
 
 Command help:
   proxy-create          Create SSH->Ravello API proxy.
@@ -74,7 +74,7 @@ from . import proxy, node, fixup, logging, factory
 
 
 def _main():
-    """Raviron main entry point."""
+    """Ravstack main entry point."""
     args = docopt.docopt(__doc__)
     env = factory.get_environ(args)
 

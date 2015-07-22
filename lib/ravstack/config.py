@@ -1,17 +1,17 @@
 #
-# This file is part of Raviron. Raviron is free software available under
+# This file is part of ravstack. Ravstack is free software available under
 # the terms of the MIT license. See the file "LICENSE" that was provided
 # together with this source file for the licensing terms.
 #
-# Copyright (c) 2015 the Raviron authors. See the file "AUTHORS" for a
+# Copyright (c) 2015 the ravstack authors. See the file "AUTHORS" for a
 # complete list.
 
 import os
 from configparser import ConfigParser, ExtendedInterpolation
 
 
-_config_name = 'raviron.conf'
-_system_config = '/etc/raviron'
+_config_name = 'ravstack.conf'
+_system_config = '/etc/ravstack'
 
 _default_config = [
     # section, name, default, required, description, env var, cli arg
@@ -28,8 +28,8 @@ _default_config = [
             'Name of PXE boot ISO image.', None, '--pxe-iso'),
     ('ravello', 'min_runtime', '120', False,
             'Minimum application runtime (in minutes).', None, None),
-    ('proxy', 'key_name', 'id_raviron', False, 'Proxy SSH keypair name.', None, None),
-    ('proxy', 'proxy_name', 'raviron-proxy', False, 'Proxy SSH keypair name.', None, None),
+    ('proxy', 'key_name', 'id_ravstack', False, 'API proxy keypair name.', None, None),
+    ('proxy', 'proxy_name', 'ironic-proxy', False, 'API proxy script.', None, None),
     ('tripleo', 'nodes_file', '~/instackenv.json', False,
             'File name containing node definitions.', None, None),
     ('tripleo', 'undercloud_env', '~/stackrc', False, 'Undercloud rc file.', None, None),

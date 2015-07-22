@@ -1,9 +1,9 @@
 #
-# This file is part of Raviron. Raviron is free software available under
+# This file is part of ravstack. Ravstack is free software available under
 # the terms of the MIT license. See the file "LICENSE" that was provided
 # together with this source file for the licensing terms.
 #
-# Copyright (c) 2015 the Raviron authors. See the file "AUTHORS" for a
+# Copyright (c) 2015 the ravstack authors. See the file "AUTHORS" for a
 # complete list.
 
 import os
@@ -49,7 +49,7 @@ def find_all_ips(app, subnet, mask):
 def create_node(env, new_name):
     """Create a new node and return it."""
     node = {'name': new_name,
-            'description': 'Node created by raviron.',
+            'description': 'Node created by ravstack.',
             'os': 'linux_manuel',  # sic
             'baseVmId': 0,
             'numCpus': env.args['--cpus'],
@@ -162,7 +162,7 @@ def do_dump(env):
     keyfile = os.path.join(util.get_homedir(), '.ssh', keyname)
     if not util.can_open(keyfile):
         raise RuntimeError('`~/.ssh/{}` does not exist.\n'
-                           'Use `raviron proxy-create` to create it.'
+                           'Use `ravstack proxy-create` to create it.'
                            .format(keyname))
     with open(keyfile) as fin:
         privkey = fin.read()
