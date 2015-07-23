@@ -9,6 +9,8 @@
 import os
 from configparser import ConfigParser, ExtendedInterpolation
 
+from . import util
+
 
 _config_name = 'ravstack.conf'
 _system_config = '/etc/ravstack'
@@ -93,18 +95,35 @@ def require(config, section, key):
     return cfgsect[key]
 
 
-def dump_defaults():
+def dump_defaults(fout):
     """Dump default configuration."""
     current = None
     for section, name, default, required, description, env, arg in _default_config:
         if section != current:
-            print('[{}]'.format(section))
+            fout.write('[{}]\n'.format(section))
             current = section
-        print('# {}{}'.format(description, ' [required]' if required else ''))
+        fout.write('# {}{}\n'.format(description, ' [required]' if required else ''))
         if env or arg:
             env = '$' + env if env else env
-            print('# Also specified as {}'.format(' or '.join(filter(None, (env, arg)))))
-        print('{}{}={}\n'.format('' if required else '#', name, default))
+            fout.write('# Also specified as {}\n'.format(' or '.join(filter(None, (env, arg)))))
+        fout.write('{}{}={}\n\n'.format('' if required else '#', name, default))
+
+
+def do_create(env):
+    """The 'ravstack config-create` command."""
+    if 'VIRTUAL_ENV' in os.environ:
+        cfgname = os.path.join(os.environ['VIRTUAL_ENV'], _config_name)
+    else:
+        st = util.try_stat(_system_config)
+        if st is None:
+            util.create_directory(_system_config)
+        cfgname = os.path.join(_system_config, _config_name)
+    st = util.try_stat(cfgname)
+    if st is not None:
+        return
+    with open(cfgname, 'w') as fout:
+        dump_defaults(fout)
+    print('Created config file `{}`.'.format(cfgname))
 
 
 if __name__ == '__main__':

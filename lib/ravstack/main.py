@@ -9,6 +9,7 @@
 """Ravello Ironic command-line utility.
 
 Usage:
+  ravstack [options] config-create
   ravstack [options] proxy-create
   ravstack [options] proxy-run
   ravstack [options] node-create [-c <cpus>] [-m <memory>]
@@ -21,16 +22,16 @@ Usage:
   ravstack [options] node-get-boot-device <node>
   ravstack [options] node-set-boot-device <node> <bootdev>
   ravstack [options] node-get-macs <node> [--cached]
-  ravstack [options] fixup-network
-  ravstack [options] fixup-nodes
+  ravstack [options] fixup-post
   ravstack --help
 
 Command help:
-  proxy-create          Create SSH->Ravello API proxy.
+  config-create         Create ravstack configuration file.
+  proxy-create          Create SSH -> Ravello API proxy.
   proxy-run             Run the API proxy.
   node-create           Create a new node.
   node-dump             Dump node definitions to specified file.
-  node-list             List running nodes (--all lists all).
+  node-list             List powered on nodes. (--all lists all nodes)
   node-start            Start a node.
   node-stop             Stop a node.
   node-reboot           Reboot a node.
@@ -38,11 +39,8 @@ Command help:
   node-set-boot-device  Set boot device for <node> to <bootdev>.
                         The boot device may be "hd" or "network".
   node-get-macs         Return MAC addresses for <node>.
-  fixup-network         Fix Ravello network settings after one or
+  fixup-post            Fix Ravello and node settings after one or
                         more nodes were deployed.
-  fixup-nodes           Fix on-node settings after they were deployed
-                        or network settings have changed.
-                        NOTE: run this command *after* fixup-network!
 
 Options:
   -d, --debug       Enable debugging.
@@ -70,7 +68,7 @@ Options for `node-create`:
 import sys
 import docopt
 
-from . import proxy, node, fixup, logging, factory
+from . import logging, factory
 
 
 def _main():
@@ -78,7 +76,24 @@ def _main():
     args = docopt.docopt(__doc__)
     env = factory.get_environ(args)
 
-    if args['proxy-create']:
+    # On-demand imports for faster startup time.
+    # The "proxy-run" command is used a *lot* by Ironic.
+
+    for key, value in args.items():
+        if not value:
+            continue
+        if key.startswith('config-'):
+            from . import config
+        elif key.startswith('proxy-'):
+            from . import proxy
+        elif key.startswith('node-'):
+            from . import node
+        elif key.startswith('fixup-'):
+            from . import fixup
+
+    if args['config-create']:
+        config.do_create(env)
+    elif args['proxy-create']:
         proxy.do_create(env)
     elif args['proxy-run']:
         proxy.do_run(env)
@@ -102,10 +117,8 @@ def _main():
         node.do_set_boot_device(env, args['<node>'], args['<bootdev>'])
     elif args['node-get-macs']:
         node.do_get_macs(env, args['<node>'], False)
-    elif args['fixup-network']:
-        fixup.do_network(env)
-    elif args['fixup-nodes']:
-        fixup.do_nodes(env)
+    elif args['fixup-post']:
+        fixup.do_post(env)
 
 
 def main():
@@ -115,7 +128,7 @@ def main():
     except Exception as e:
         log = logging.get_logger()
         log.error('Uncaught exception:', exc_info=True)
-        if logging.get_debug():
+        if logging.get_debug() and not logging.get_verbose():
             raise
         sys.stdout.write('Error: {!s}\n'.format(e))
         sys.exit(1)

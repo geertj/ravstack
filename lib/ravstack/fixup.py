@@ -12,6 +12,39 @@ from urllib.parse import urlparse
 from . import ravello, util
 
 
+def fixup_keystone(env):
+    """Fixup keystone in the overcloud."""
+    # This adds a missing service and endpoint for volumev2. The definitions
+    # are copied from the volume service.
+    keystone = env.keystone_over
+    volumev1_svc = volumev2_svc = None
+    for service in keystone.services.list():
+        if service.type == 'volume':
+            volumev1_svc = service
+        elif service.type == 'volumev2':
+            volumev2_svc = service
+    if not volumev1_svc:
+        raise RuntimeError('Service `volume` not found.')
+    if not volumev2_svc:
+        keystone.services.create(name='cinderv2', type='volumev2',
+                                 description='Cinder Volume Service v2')
+    volumev2_svc = keystone.services.find(name='cinderv2')
+    volumev1_ep = volumev2_ep = None
+    for endpoint in keystone.endpoints.list():
+        if endpoint.service_id == volumev1_svc.id:
+            volumev1_ep = endpoint
+        elif endpoint.service_id == volumev2_svc.id:
+            volumev2_ep = endpoint
+    if not volumev1_ep:
+        raise RuntimeError('Endpoint for service `volume` not found.')
+    if not volumev2_ep:
+        keystone.endpoints.create(region=volumev1_ep.region, service_id=volumev2_svc.id,
+                                  publicurl=volumev1_ep.publicurl.replace('v1', 'v2'),
+                                  adminurl=volumev1_ep.adminurl.replace('v1', 'v2'),
+                                  internalurl=volumev1_ep.internalurl.replace('v1', 'v2'))
+        print('Created endpoint for service `volumev2`.')
+
+
 def build_mac_map(servers):
     """Build a Mac -> (IP, name, aliases) map for a list of Nova servers."""
     mac_map = {}
@@ -24,8 +57,8 @@ def build_mac_map(servers):
     return mac_map
 
 
-def update_networking(vm, mac_map):
-    """Update """
+def update_addresses(vm, mac_map):
+    """Update IP addresses for VMs"""
     for conn in vm.get('networkConnections', []):
         mac = ravello.get_mac(conn)
         if mac in mac_map:
@@ -79,7 +112,7 @@ def update_services(vm, mac_map):
     return updated
 
 
-def do_network(env):
+def fixup_networking(env):
     """The `fixup-network` command.
 
     This updates the VM name, name aliases, and IP addresses on the Ravello
@@ -98,7 +131,7 @@ def do_network(env):
     mac_map = build_mac_map(nodes)
     # IPs / name / aliases
     for vm in ravello.get_vms(app, 'design'):
-        if update_networking(vm, mac_map):
+        if update_addresses(vm, mac_map):
             updated.add(vm['name'])
     # Add required services
     for vm in ravello.get_vms(app, 'design'):
@@ -110,8 +143,8 @@ def do_network(env):
         return
     env.client.call('PUT', '/applications/{id}'.format(**app), app)
     env.client.call('POST', '/applications/{id}/publishUpdates'.format(**app))
-    print('Updated node{}: {}.'.format('s' if updated else '',
-                                       ', '.join(sorted(updated))))
+    print('Fixed networking for node{}: {}.'.format('s' if updated else '',
+                                                    ', '.join(sorted(updated))))
 
 
 def add_httpd_server_alias(env, addr, nodename):
@@ -176,7 +209,7 @@ def update_nova_vnc_url(env, addr, nodename, newaddr):
     return True
 
 
-def do_nodes(env):
+def fixup_nodes(env):
     """The `fixup-nodes` command.
 
     This command changes the ServerAlias on the horizon node so that it will
@@ -217,6 +250,14 @@ def do_nodes(env):
             continue
         if update_nova_vnc_url(env, service['ip'], vm['name'], vncaddr):
             updated.add(vm['name'])
-    if updated:
-        print('Updated node{}: {}.'.format('s' if updated else '',
-                                           ', '.join(sorted(updated))))
+    if not updated:
+        return
+    print('Fixed config for node{}: {}.'.format('s' if updated else '',
+                                                ', '.join(sorted(updated))))
+
+
+def do_post(env):
+    """The `ravstack fixup-post` command."""
+    fixup_keystone(env)
+    fixup_networking(env)
+    fixup_nodes(env)

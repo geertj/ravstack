@@ -12,7 +12,7 @@ import shlex
 import subprocess
 import textwrap
 
-from . import node, util
+from . import util, node
 
 
 # proxy-create command
@@ -78,6 +78,13 @@ def install_proxy(pubkey, command):
     os.chmod(authfile, 0o600)
 
 
+def test_proxy(keyfile):
+    """Test the proxy."""
+    # This also has the benefit that the host key is added to the known hosts file.
+    subprocess.check_call(['ssh', '-q', '-o', 'StrictHostKeyChecking=no', '-i', keyfile,
+                           'localhost', 'true'])
+
+
 def do_create(env):
     """The `ravstack proxy-create` command."""
     keyname = env.config['proxy']['key_name']
@@ -85,6 +92,7 @@ def do_create(env):
     keyfile = create_ssh_keypair(keyname, proxyname)
     proxyfile = create_proxy(proxyname)
     install_proxy(keyfile + '.pub', proxyfile)
+    test_proxy(keyfile)
     print('Private key created as: ~/.ssh/{}'.format(keyname))
     print('Proxy created at: ~/bin/{}'.format(proxyname))
 
@@ -96,6 +104,7 @@ def do_create(env):
 # https://github.com/openstack/ironic/blob/master/ironic/drivers/modules/ssh.py#L151
 
 _virsh_commands = [
+    ('true', re.compile('^true$')),
     ('start', re.compile(' start ([^ ]+)')),
     ('stop', re.compile(' destroy ([^ ]+)')),
     ('reboot', re.compile(' reset ([^ ]+)')),
@@ -107,16 +116,13 @@ _virsh_commands = [
 ]
 
 
-def parse_virsh_command_line():
+def parse_virsh_command_line(command):
     """Parse the virsh command line.
 
     The proxy script is run as a forced command specified in an ssh private
     key. The original command is available in the $SSH_ORIGINAL_COMMAND
     environment variable.
     """
-    command = os.environ.get('SSH_ORIGINAL_COMMAND')
-    if command is None:
-        raise RuntimeError('This command needs to be run through ssh.')
     for cmd, regex in _virsh_commands:
         match = regex.search(command)
         if match:
@@ -127,14 +133,19 @@ def parse_virsh_command_line():
 def do_run(env):
     """The `proxy-run` command."""
     log = env.logger
-    log.debug('New request, command = {}'.format(os.environ.get('SSH_ORIGINAL_COMMAND', '?')))
+    command = os.environ.get('SSH_ORIGINAL_COMMAND')
+    if command is None:
+        raise RuntimeError('This command needs to be run through ssh.')
+    log.debug('New request, command = {}'.format(command))
 
-    cmdline = parse_virsh_command_line()
+    cmdline = parse_virsh_command_line(command)
     log.info('Parsed command: {}'.format(' '.join(cmdline)))
 
     env.args['--cached'] = True
 
-    if cmdline[0] == 'start':
+    if cmdline[0] == 'true':
+        pass
+    elif cmdline[0] == 'start':
         node.do_start(env, cmdline[1])
     elif cmdline[0] == 'stop':
         node.do_stop(env, cmdline[1])

@@ -9,7 +9,6 @@
 import json
 import copy
 
-from novaclient.v2 import client as nova_client
 from . import ravello, config, logging, util
 
 
@@ -116,12 +115,23 @@ def get_env_over(env):
     return util.parse_env_file(fname, '^OS_|_VERSION=')
 
 
+def get_keystone_client(env):
+    """Return a nova client based on *env*."""
+    from keystoneclient.v2_0 import client
+    client = client.Client(auth_url=env['OS_AUTH_URL'],
+                           username=env['OS_USERNAME'],
+                           password=env['OS_PASSWORD'],
+                           tenant_name=env['OS_TENANT_NAME'])
+    return client
+
+
 def get_nova_client(env):
     """Return a nova client based on *env*."""
-    client = nova_client.Client(auth_url=env['OS_AUTH_URL'],
-                                username=env['OS_USERNAME'],
-                                api_key=env['OS_PASSWORD'],
-                                project_id=env['OS_TENANT_NAME'])
+    from novaclient.v2 import client
+    client = client.Client(auth_url=env['OS_AUTH_URL'],
+                           username=env['OS_USERNAME'],
+                           api_key=env['OS_PASSWORD'],
+                           project_id=env['OS_TENANT_NAME'])
     return client
 
 
@@ -148,4 +158,5 @@ def get_environ(args=None):
     env.lazy_attr('env_under', lambda: get_env_under(env))
     env.lazy_attr('env_over', lambda: get_env_over(env))
     env.lazy_attr('nova_under', lambda: get_nova_client(env.env_under))
+    env.lazy_attr('keystone_over', lambda: get_keystone_client(env.env_over))
     return env

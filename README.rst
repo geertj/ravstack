@@ -57,7 +57,7 @@ Once this is done, create the nodes and add them to Ironic::
   Created 3 nodes: node1, node2, node3.
   $ ravstack node-dump
   Wrote 3 nodes to `~/instackenv.json`.
-  $ source ~/.stackrc
+  $ source ~/stackrc
   $ openstack baremetal import --json instackenv.json
   $ openstack baremetal configure boot
   $ openstack baremetal introspection bulk start

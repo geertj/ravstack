@@ -74,6 +74,9 @@ def get_logger():
         handler = logging.FileHandler(logfile)
         root.addHandler(handler)
         handler.setFormatter(logging.Formatter(template))
+    if not root.handlers:
+        handler = logging.NullHandler()
+        root.addHandler(handler)
     root.setLevel(logging.DEBUG if get_debug() else logging.INFO)
     # A little less verbosity for requests.
     sublogger = logging.getLogger('requests.packages.urllib3.connectionpool')
