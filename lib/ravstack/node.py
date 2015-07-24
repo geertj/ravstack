@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import time
+import re
 
 from . import util, ravello
 from .util import inet_aton, inet_ntoa
@@ -258,35 +259,36 @@ def do_start(env, nodename):
     is_retry = False
     def start_vm():
         nonlocal app, is_retry
-        # Reload because someone else could have changed the power state in the
-        # mean time.
+        # Reload because someone else could have changed the application.
         if is_retry:
             app = env.client.call('GET', '/applications/{id}'.format(**app))
-            vm = get_vm(app, nodename)
         is_retry = True
         vm = get_vm(app, nodename)
         log.debug('Node `{name}` is in state `{state}`.'.format(**vm))
         state = vm['state']
-        # The semantics expected by Ironic are that a "start" in an ON power
-        # state will stop the node and then start it again.
-        if state in ('STARTING', 'STOPPING', 'RESTARTING'):
-            raise ravello.Retry('Node in state `{}`'.format(state))
-        # UPDATING only happens when the boot device was updated. This restarts
-        # the VM for us. So as a short-cut we don't require a power-off as that
-        # just happened.
-        if state == 'UPDATING':
+        # STARTED, or a transient state that will result in STARTED: done
+        if state in ('STARTING', 'STARTED', 'RESTARTING', 'UPDATING'):
             return
-        # STARTED or STOPPED
-        action = 'start' if state == 'STOPPED' else 'restart'
-        env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/{action}'
-                                    .format(app=env.application, vm=vm, action=action))
+        # STOPPING will result in STOPPED. Need to wait, cannot do anything right now.
+        elif state == 'STOPPING':
+            raise ravello.Retry('Node in state `{}`'.format(state))
+        # Is there a scheduled change of boot device?
+        bootdev = get_next_boot_device(vm)
+        if bootdev:
+            log.debug('Updating boot device to `{}`.'.format(bootdev))
+            design_vm = get_vm(app, nodename, 'design')
+            set_current_boot_device(design_vm, bootdev)
+            clear_next_boot_device(design_vm)
+            env.client.call('PUT', '/applications/{id}'.format(**app), app)
+            env.client.call('POST', '/applications/{id}/publishUpdates'.format(**app))
+        env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/start'
+                                    .format(app=env.application, vm=vm))
     # According to the docs, 400 means the application is in the middle of
     # another action, but I get 409 instead.
-    # Retry just 3 times in case of HTTP errors. Most of the times the code
-    # aborts early based on the state of the VM and doesn't actually try to
-    # call the start action if we know it will fail. The retries here are for
-    # race conditions where someone else started up the VM concurrently. In the
-    # next iteration, we should detect the updated state and exit cleanly.
+    # Retry just 3 times in case of HTTP errors. The start_vm function will not
+    # try to start the VM if that would not be possible (e.g. the VM is in
+    # STOPPING). The retries here are for race conditions where someone else
+    # started up the VM concurrently.
     log.debug('Starting node `{}`.'.format(nodename))
     retry_operation(start_vm, 1200, {400: 3, 403: 3, 409: 3})
     env.application = app
@@ -305,9 +307,12 @@ def do_stop(env, nodename):
         vm = get_vm(app, nodename)
         log.debug('Node `{name}` is in state `{state}`.'.format(**vm))
         state = vm['state']
+        # STOPPED, or STOPPING which will result in STOPPED: done
         if state in ('STOPPED', 'STOPPING'):
             return
-        if state in ('STARTING', 'RESTARTING', 'UPDATING'):
+        # These states will result in STARTED but prevent us from doing
+        # anything right now. So wait.
+        elif state in ('STARTING', 'RESTARTING', 'UPDATING'):
             raise ravello.Retry('Node in state `{}`'.format(state))
         # STARTED
         env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/poweroff'
@@ -319,36 +324,76 @@ def do_stop(env, nodename):
 
 def do_reboot(env, nodename):
     """The `node-reboot` command."""
-    log = env.logger
-    app = env.application
-    is_retry = False
-    def stop_vm():
-        nonlocal app, is_retry
-        if is_retry:
-            app = env.client.call('GET', '/applications/{id}'.format(**app))
-        is_retry = True
-        vm = get_vm(app, nodename)
-        log.debug('Node `{name}` is in state `{state}`.'.format(**vm))
-        state = vm['state']
-        if state in ('STARTING', 'STOPPING', 'RESTARTING', 'UPDATING'):
-            raise ravello.Retry('Node in state `{}`'.format(state))
-        # STOPPED or STARTED
-        env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/restart'
-                                    .format(app=env.application, vm=vm))
-    log.debug('Rebooting node `{}`.'.format(nodename))
-    retry_operation(stop_vm, 1200, {400: 3, 403: 3, 409: 3})
-    env.application = app
+    do_stop(env, nodename)
+    del env.application  # re-init it with the correct VM state
+    do_start(env, nodename)
+
+
+# Boot device stuff. This is somewhat complicated. Changing the boot device on
+# Ravello will restart a VM. Ironic does not expect that. So we use a hack
+# whereby if a boot device change is requested while a VM is not in the STOPPED
+# state, that we "queue" this change into the VM's description and execute it
+# only at the next power change.
+
+def get_current_boot_device(vm):
+    """Return the current boot device for a VM."""
+    drive = get_disk(vm)
+    return 'hd' if drive.get('boot') else 'network'
+
+def set_current_boot_device(vm, bootdev):
+    """Set the current boot device for a VM."""
+    drive = get_disk(vm)
+    drive['boot'] = (bootdev == 'hd')
+
+
+_re_bootdev = re.compile('\\[boot: (hd|network)\\]')
+
+def get_next_boot_device(vm):
+    """Return the next boot device for a VM, if any."""
+    # Yes, we do indeed abuse the "description" field for this...
+    desc = vm.get('description', '')
+    match = _re_bootdev.search(desc)
+    return match.group(1) if match else None
+
+def set_next_boot_device(vm, bootdev):
+    """Schedule a boot device change."""
+    desc = vm.get('description', '')
+    match = _re_bootdev.search(desc)
+    current = match.group(1) if match else None
+    if current == bootdev:
+        return
+    if current:
+        desc = desc[:match.start(0)] + desc[match.end(0)+1:]
+    desc += '[boot: {}]'.format(bootdev)
+    vm['description'] = desc
+
+def clear_next_boot_device(vm):
+    """Clear any pending boot device change."""
+    desc = vm.get('description', '')
+    match = _re_bootdev.search(desc)
+    if not match:
+        return
+    desc = desc[:match.start(0)] + desc[match.end(0)+1:]
+    vm['description'] = desc
+
+
+def get_boot_device(vm):
+    """Get the effective boot device."""
+    bootdev = get_next_boot_device(vm)
+    if bootdev is None:
+        bootdev = get_current_boot_device(vm)
+    return bootdev
 
 
 def do_get_boot_device(env, nodename):
     """The `node-get-boot-device` command."""
     vm = get_vm(env.application, nodename)
-    drive = get_disk(vm)
-    print('hd' if drive.get('boot') else 'network')
+    bootdev = get_boot_device(vm)
+    print(bootdev)
 
 
-def do_set_boot_device(env, nodename, device):
-    """Set the boot device for *nodename* to *device*."""
+def do_set_boot_device(env, nodename, bootdev):
+    """Set the boot device for *nodename* to *bootdev*."""
     log = env.logger
     app = env.application
     is_retry = False
@@ -358,19 +403,30 @@ def do_set_boot_device(env, nodename, device):
             app = env.client.call('GET', '/applications/{id}'.format(**app))
         is_retry = True
         vm = get_vm(app, nodename)
+        current = get_boot_device(vm)
+        if current == bootdev:
+            log.debug('Boot device already set to `{}`.'.format(bootdev))
+            return
         state = vm['state']
-        if state in ('STARTING', 'STOPPING', 'RESTARTING'):
-            raise ravello.Retry('Node in state `{}`'.format(state))
-        vm = get_vm(app, nodename, 'design')
-        drive = get_disk(vm)
-        drive['boot'] = bool(device == 'hd')
+        design_vm = get_vm(app, nodename, 'design')
+        # Is it a matter of removing the next boot device?
+        if get_current_boot_device(vm) == bootdev:
+            clear_next_boot_device(design_vm)
+            log.debug('Clearing next boot device.')
+        # Nope: need to updated the real boot device.
+        # We can do this when state == STOPPED.
+        elif state == 'STOPPED':
+            set_current_boot_device(design_vm, bootdev)
+            clear_next_boot_device(design_vm)
+            log.debug('Setting current boot device to `{}`.'.format(bootdev))
+        # Need to queue the boot device change.
+        else:
+            set_next_boot_device(design_vm, bootdev)
+            log.debug('Setting next boot device to `{}`.'.format(bootdev))
         env.client.call('PUT', '/applications/{id}'.format(**app), app)
-    log.debug('Setting boot device for node `{}` to `{}`'.format(nodename, device))
-    retry_operation(set_boot_device, 1200, {400: 3, 403: 3, 409: 3})
-    def publish_updates():
         env.client.call('POST', '/applications/{id}/publishUpdates'.format(**app))
-    log.debug('Publishing updates for application `{name}`.'.format(**app))
-    retry_operation(publish_updates)
+    log.debug('Setting boot device for node `{}` to `{}`'.format(nodename, bootdev))
+    retry_operation(set_boot_device, 1200, {400: 3, 403: 3, 409: 3})
     env.application = app
 
 
