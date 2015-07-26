@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import time
+import tempfile
 import re
 
 from . import util, ravello
@@ -111,7 +112,6 @@ def create_node(env, new_name):
                      'protocol': 'TCP',
                      'external': True,
                      'ip': first_ip})
-
     return node
 
 
@@ -157,19 +157,18 @@ def do_create(env):
                                           ', '.join(new_names)))
 
 
-def do_dump(env):
-    """The `node-dump` command."""
+def dump_nodes(env):
+    """Dump the nodes to the nodes file."""
+    # The nodes file (typically ~/instackenv.json) contains information about
+    # the available nodes, their mac addresses and power management
+    # credentials. It is read by "openstack baremetal import" when it creates
+    # the nodes in Ironic.
     keyname = env.config['proxy']['key_name']
     keyfile = os.path.join(util.get_homedir(), '.ssh', keyname)
     if not util.can_open(keyfile):
-        raise RuntimeError('`~/.ssh/{}` does not exist.\n'
-                           'Use `ravstack proxy-create` to create it.'
-                           .format(keyname))
+        raise RuntimeError('`~/.ssh/{}` does not exist.'.format(keyname))
     with open(keyfile) as fin:
         privkey = fin.read()
-
-    # Get node definitions from Ravello
-
     nodes = []
     for vm in env.nodes[1:]:
         node = {'name': vm['name'],
@@ -187,15 +186,47 @@ def do_dump(env):
                      'pm_user': util.get_user(),
                      'pm_password': privkey})
         nodes.append(node)
-
-    # Dump to the nodes file.
-
     nodes_file = env.config['tripleo']['nodes_file']
     fname = os.path.expanduser(nodes_file)
     with open(fname, 'w') as fout:
         fout.write(json.dumps({'nodes': nodes}, sort_keys=True, indent=2))
-
     print('Wrote {} nodes to `{}`.'.format(len(nodes), nodes_file))
+
+
+_ethers_file = '/etc/ethers'
+
+def dump_ethers(env):
+    """Write the /etc/ethers file."""
+    # The /etc/ethers file is used so that the dnsmasq for the access network
+    # allocates the right address for our nodes. This removes the need for us
+    # to fix things up later (like for the management network).
+    if not util.can_run_sudo():
+        print('Warning: no sudo access, not writing `{}`.'.format(_ethers_file))
+        return
+    ethers = []
+    for node in env.nodes[1:]:
+        for conn in node['networkConnections']:
+            mac = ravello.get_mac(conn)
+            ip = ravello.get_ip(conn)
+            if mac and ip:
+                ethers.append((mac, ip))
+    fd, tmpname = tempfile.mkstemp()
+    with open(fd, 'w') as fout:
+        for mac, ip in ethers:
+            fout.write('{} {}\n'.format(mac, ip))
+    util.run_sudo(['chown', '0:0', tmpname])
+    util.run_sudo(['chmod', '644', tmpname])
+    if util.selinux_enabled():
+        util.run_sudo(['chcon', '--reference', '/etc/hosts', tmpname])
+    util.run_sudo(['mv', tmpname, _ethers_file])
+    util.run_sudo(['systemctl', 'restart', 'dnsmasq'])
+    print('Wrote {} mac addresses to `{}`.'.format(len(ethers), _ethers_file))
+
+
+def do_dump(env):
+    """The `node-dump` command."""
+    dump_nodes(env)
+    dump_ethers(env)
 
 
 # Ravello has six VM states. Mapping to Ironic power states:

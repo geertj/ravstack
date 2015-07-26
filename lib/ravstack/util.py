@@ -119,9 +119,45 @@ def parse_env_file(filename, pattern):
     return env
 
 
-def run_ssh(addr, command, input=''):
+def run_ssh(addr, command, **kwargs):
     """Run a command over SSH and return the output."""
     encoding = locale.getpreferredencoding()
-    output = subprocess.check_output(['ssh', '-T', '-o', 'StrictHostKeyChecking=no',
-                                      addr, command], input=input.encode(encoding))
+    if kwargs.get('input'):
+        kwargs['input'] = kwargs['input'].encode(encoding)
+    if isinstance(command, str):
+        command = [command]
+    cmdargs = ['ssh', '-T', '-o', 'StrictHostKeyChecking=no', addr] + command
+    output = subprocess.check_output(cmdargs, **kwargs)
     return output.decode(encoding)
+
+
+def can_run_sudo(command='/bin/sh', user='root'):
+    """Check whether the current user is allowed to run sudo."""
+    if isinstance(command, str):
+        command = [command]
+    cmdargs = ['sudo', '-n', '-u', user, '-l'] + command
+    ret = subprocess.call(cmdargs, stdout=subprocess.DEVNULL)
+    return ret == 0
+
+
+def run_sudo(command, user='root', **kwargs):
+    """Run a command through sudo and return the output."""
+    encoding = locale.getpreferredencoding()
+    if kwargs.get('input'):
+        kwargs['input'] = kwargs['input'].encode(encoding)
+    if isinstance(command, str):
+        command = [command]
+    cmdargs = ['sudo', '-u', user] + command
+    output = subprocess.check_output(cmdargs, **kwargs)
+    return output.decode(encoding)
+
+
+def selinux_enabled():
+    """Return whether selinux is enabled."""
+    encoding = locale.getpreferredencoding()
+    try:
+        output = subprocess.check_output(['getenforce'])
+    except subprocess.CalledProcessError:
+        return False
+    output = output.decode(encoding).strip().lower()
+    return output in ('permissive', 'enforcing')
