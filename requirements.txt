@@ -1,3 +1,4 @@
 docopt
 requests
-python_novaclient
+python-keystoneclient
+python-novaclient

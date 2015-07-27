@@ -64,30 +64,30 @@ def get_ravello_application(env):
     if len(apps) == 0:
         raise RuntimeError('Application `{}` not found'.format(name))
     app = env.client.call('GET', '/applications/{id}'.format(**apps[0]))
+    for vm in ravello.get_vms(app):
+        if not vm.get('networkConnections'):
+            continue
+        # Sort network connections on index in case they stop coming back
+        # sorted at some point. We assume the first connection is the access
+        # network, and the second is the management network.
+        vm['networkConnections'].sort(key=lambda c: c['device']['index'])
     return app
 
 
 def get_nodes(app):
-    """Return the "nodes" from a Ravello application.
+    """Return a list of "nodes" in the application.
 
-    The list contains all VMs with static networking, and is sorted on
-    increasing IP on the first index.  The Ironic controller node will be the
-    first in the list, and will be followed by the managed nodes.
+    The first entry in the list will be the undercloud node a.k.a. the
+    RDO-Manager. The nodes after that are nodes managed by Ironic that were
+    created `ravstack node-create`.
     """
     nodes = []
     for vm in ravello.get_vms(app):
         if not vm.get('networkConnections'):
             continue
-        node = copy.deepcopy(vm)
-        node['networkConnections'].sort(key=lambda c: c['device']['index'])
-        all_static = True
-        for conn in node['networkConnections']:
-            scfg = conn.get('ipConfig', {}).get('staticIpConfig', {})
-            if 'ip' not in scfg or 'mask' not in scfg:
-                all_static = False
-                break
-        if all_static:
-            nodes.append(node)
+        nodes.append(copy.deepcopy(vm))
+    # Sort the nodes by IP of the first network connection. By convention
+    # the undercloud node has the lowest IP.
     nodes.sort(key=lambda vm: util.inet_aton(vm['networkConnections'][0]
                                                ['ipConfig']['staticIpConfig']['ip']))
     return nodes
@@ -115,24 +115,21 @@ def get_env_over(env):
     return util.parse_env_file(fname, '^OS_|_VERSION=')
 
 
-def get_keystone_client(env):
-    """Return a nova client based on *env*."""
-    from keystoneclient.v2_0 import client
-    client = client.Client(auth_url=env['OS_AUTH_URL'],
-                           username=env['OS_USERNAME'],
-                           password=env['OS_PASSWORD'],
-                           tenant_name=env['OS_TENANT_NAME'])
-    return client
+def get_keystone_session(env):
+    """Return a keystone session."""
+    from keystoneclient.auth.identity import v2
+    from keystoneclient.session import Session
+    auth = v2.Password(auth_url=env['OS_AUTH_URL'],
+                       username=env['OS_USERNAME'],
+                       password=env['OS_PASSWORD'],
+                       tenant_name=env['OS_TENANT_NAME'])
+    return Session(auth=auth)
 
 
-def get_nova_client(env):
-    """Return a nova client based on *env*."""
-    from novaclient.v2 import client
-    client = client.Client(auth_url=env['OS_AUTH_URL'],
-                           username=env['OS_USERNAME'],
-                           api_key=env['OS_PASSWORD'],
-                           project_id=env['OS_TENANT_NAME'])
-    return client
+def get_nova_client(session):
+    """Return a nova client using *session*."""
+    from novaclient import client
+    return client.Client('2', session=session)
 
 
 def get_environ(args=None):
@@ -156,7 +153,6 @@ def get_environ(args=None):
     env.lazy_attr('nodes', lambda: get_nodes(env.application))
     env.lazy_attr('iso', lambda: get_pxe_iso(env))
     env.lazy_attr('env_under', lambda: get_env_under(env))
-    env.lazy_attr('env_over', lambda: get_env_over(env))
-    env.lazy_attr('nova_under', lambda: get_nova_client(env.env_under))
-    env.lazy_attr('keystone_over', lambda: get_keystone_client(env.env_over))
+    env.lazy_attr('session_under', lambda: get_keystone_session(env.env_under))
+    env.lazy_attr('nova_under', lambda: get_nova_client(env.session_under))
     return env

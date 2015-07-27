@@ -22,7 +22,7 @@ Usage:
   ravstack [options] node-get-boot-device <node>
   ravstack [options] node-set-boot-device <node> <bootdev>
   ravstack [options] node-get-macs <node> [--cached]
-  ravstack [options] fixup-post
+  ravstack [options] fixup
   ravstack --help
 
 Command help:
@@ -39,7 +39,7 @@ Command help:
   node-set-boot-device  Set boot device for <node> to <bootdev>.
                         The boot device may be "hd" or "network".
   node-get-macs         Return MAC addresses for <node>.
-  fixup-post            Fix Ravello and node settings after one or
+  fixup                 Fix Ravello and OS config after one or
                         more nodes were deployed.
 
 Options:
@@ -88,7 +88,7 @@ def _main():
             from . import proxy
         elif key.startswith('node-'):
             from . import node
-        elif key.startswith('fixup-'):
+        elif key.startswith('fixup'):
             from . import fixup
 
     if args['config-create']:
@@ -117,8 +117,8 @@ def _main():
         node.do_set_boot_device(env, args['<node>'], args['<bootdev>'])
     elif args['node-get-macs']:
         node.do_get_macs(env, args['<node>'], False)
-    elif args['fixup-post']:
-        fixup.do_post(env)
+    elif args['fixup']:
+        fixup.do_fixup(env)
 
 
 def main():

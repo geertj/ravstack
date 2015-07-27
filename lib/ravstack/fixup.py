@@ -12,45 +12,14 @@ from urllib.parse import urlparse
 from . import ravello, util
 
 
-def fixup_keystone(env):
-    """Fixup keystone in the overcloud."""
-    # This adds a missing service and endpoint for volumev2. The definitions
-    # are copied from the volume service.
-    keystone = env.keystone_over
-    volumev1_svc = volumev2_svc = None
-    for service in keystone.services.list():
-        if service.type == 'volume':
-            volumev1_svc = service
-        elif service.type == 'volumev2':
-            volumev2_svc = service
-    if not volumev1_svc:
-        raise RuntimeError('Service `volume` not found.')
-    if not volumev2_svc:
-        keystone.services.create(name='cinderv2', type='volumev2',
-                                 description='Cinder Volume Service v2')
-    volumev2_svc = keystone.services.find(name='cinderv2')
-    volumev1_ep = volumev2_ep = None
-    for endpoint in keystone.endpoints.list():
-        if endpoint.service_id == volumev1_svc.id:
-            volumev1_ep = endpoint
-        elif endpoint.service_id == volumev2_svc.id:
-            volumev2_ep = endpoint
-    if not volumev1_ep:
-        raise RuntimeError('Endpoint for service `volume` not found.')
-    if not volumev2_ep:
-        keystone.endpoints.create(region=volumev1_ep.region, service_id=volumev2_svc.id,
-                                  publicurl=volumev1_ep.publicurl.replace('v1', 'v2'),
-                                  adminurl=volumev1_ep.adminurl.replace('v1', 'v2'),
-                                  internalurl=volumev1_ep.internalurl.replace('v1', 'v2'))
-        print('Created endpoint for service `volumev2`.')
-
-
-def build_mac_map(servers):
+def build_mac_map(nova):
     """Build a Mac -> (IP, name, aliases) map for a list of Nova servers."""
     mac_map = {}
-    for server in servers:
-        name = server.name[10:] if server.name.startswith('overcloud-') else server.name
-        aliases = (server.name, getattr(server, 'OS-EXT-SRV-ATTR:instance_name'))
+    for server in nova.servers.list():
+        name = server.name
+        aliases = [name, getattr(server, 'OS-EXT-SRV-ATTR:instance_name')]
+        if name.startswith('overcloud-'):
+            aliases.append(name[10:])
         for addr in server.addresses['ctlplane']:
             mac = addr['OS-EXT-IPS-MAC:mac_addr']
             mac_map[mac] = (addr['addr'], name, aliases)
@@ -84,7 +53,7 @@ def update_addresses(vm, mac_map):
     return updated
 
 
-_control_services = [
+_controller_services = [
     {'name': 'http', 'portRange': '80', 'protocol': 'TCP', 'external': True},
     {'name': 'vnc', 'portRange': '6080', 'protocol': 'TCP', 'external': True}, ]
 
@@ -92,7 +61,7 @@ def update_services(vm, mac_map):
     """Update services for VMs."""
     updated = False
     services = vm.setdefault('suppliedServices', [])
-    for req in _control_services:
+    for req in _controller_services:
         req = req.copy()
         for ip, name, aliases in mac_map.values():
             if name == vm['name']:
@@ -107,17 +76,13 @@ def update_services(vm, mac_map):
             service.clear()  # nuke "id" otherwise update is not applied
             service.update(req)
         else:
-            continue
+            continue  # service up to date
         updated = True
     return updated
 
 
-def fixup_networking(env):
-    """The `fixup-network` command.
-
-    This updates the VM name, name aliases, and IP addresses on the Ravello
-    VMs, and adds external services to the controller nodes
-    """
+def fixup_ravello(env):
+    """Fixup the nodes on the ravello side."""
     app = env.application
     ctrlname = env.config['tripleo']['controller_name']
     # Theory of operation: we list all instances on the undercloud, which are
@@ -126,25 +91,21 @@ def fixup_networking(env):
     # the host name, add some aliases. Then for controller nodes only, enable
     # some external services.
     updated = set()
-    nova = env.nova_under
-    nodes = nova.servers.list()
-    mac_map = build_mac_map(nodes)
-    # IPs / name / aliases
+    # Fixup IPs / name / aliases
     for vm in ravello.get_vms(app, 'design'):
-        if update_addresses(vm, mac_map):
+        if update_addresses(vm, env.mac_map):
             updated.add(vm['name'])
-    # Add required services
+    # Add supplied services on the controller.
     for vm in ravello.get_vms(app, 'design'):
         if ctrlname not in vm['name']:
             continue
-        if update_services(vm, mac_map):
+        if update_services(vm, env.mac_map):
             updated.add(vm['name'])
     if not updated:
         return
     env.client.call('PUT', '/applications/{id}'.format(**app), app)
     env.client.call('POST', '/applications/{id}/publishUpdates'.format(**app))
-    print('Fixed networking for node{}: {}.'.format('s' if updated else '',
-                                                    ', '.join(sorted(updated))))
+    print('Fixed Ravello config for: {}.'.format(', '.join(sorted(updated))))
 
 
 def add_httpd_server_alias(env, addr, nodename):
@@ -166,7 +127,7 @@ def add_httpd_server_alias(env, addr, nodename):
         log.debug('Node is up to date.')
         return False
     # If not, then add it using an ed script.
-    command = 'sudo ed {}'.format(fname)
+    command = 'sudo ed {} 2>/dev/null'.format(fname)
     script = textwrap.dedent("""\
             /ServerName
             a
@@ -209,22 +170,12 @@ def update_nova_vnc_url(env, addr, nodename, newaddr):
     return True
 
 
-def fixup_nodes(env):
-    """The `fixup-nodes` command.
-
-    This command changes the ServerAlias on the horizon node so that it will
-    accept the public Ravello DNS name. It will also set the VNC proxy URL on
-    the compute nodes to point to the external IP of horizon.
-    """
+def fixup_os_config(env):
+    """Fixup nodes operating system configuration."""
     app = env.application
     ctrlname = env.config['tripleo']['controller_name']
     compname = env.config['tripleo']['compute_name']
     # First update all the controllers with a ServerAlias.
-    # Also try to find the external IP and port for the novnc service on port
-    # 6080. This public IP/port will be set as the VNC URL on the compute
-    # nodes. Note that in this configuration, VNC access goes directly to one
-    # of controller, not to the VIP that is managed by the HAProxy. This is
-    # identical to horizon itslef, which is also accesssed without HAProxy.
     vncaddr = None
     updated = set()
     for vm in ravello.get_vms(app, 'deployment'):
@@ -233,6 +184,11 @@ def fixup_nodes(env):
         service = ravello.get_service(vm, '80')
         if service and add_httpd_server_alias(env, service['ip'], vm['name']):
             updated.add(vm['name'])
+    # Find out the VNC URL on the control node
+    vncaddr = None
+    for vm in ravello.get_vms(app, 'deployment'):
+        if ctrlname not in vm['name']:
+            continue
         service = ravello.get_service(vm, '6080')
         if not service:
             continue
@@ -244,20 +200,22 @@ def fixup_nodes(env):
             continue
         extport = service.get('externalPort', service['portRange'])
         vncaddr = '{}:{}'.format(extip, extport)
-    # Now update the VNC URLs.
-    for vm in ravello.get_vms(app, 'deployment'):
-        if compname not in vm['name']:
-            continue
-        if update_nova_vnc_url(env, service['ip'], vm['name'], vncaddr):
-            updated.add(vm['name'])
+        break
+    if vncaddr is None:
+        print('Warning: could not find VNC address.')
+        return
+    # Now update the VNC URLs on all nodes (only required on compute).
+    for ip, name, _ in env.mac_map.values():
+        if update_nova_vnc_url(env, ip, name, vncaddr):
+            updated.add(name)
     if not updated:
         return
-    print('Fixed config for node{}: {}.'.format('s' if updated else '',
-                                                ', '.join(sorted(updated))))
+    print('Fixed OS config for: {}.'.format(', '.join(sorted(updated))))
 
 
-def do_post(env):
-    """The `ravstack fixup-post` command."""
-    fixup_keystone(env)
-    fixup_networking(env)
-    fixup_nodes(env)
+def do_fixup(env):
+    """The `ravstack fixup` command."""
+    env.mac_map = build_mac_map(env.nova_under)
+    fixup_ravello(env)
+    del env.application  # reload
+    fixup_os_config(env)
