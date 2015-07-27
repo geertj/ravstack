@@ -79,7 +79,7 @@ an hour to complete::
   $ openstack overcloud deploy --plan overcloud
 
 After the installation is done, you should see the overcloud in a state of
-``CREATE_COMPLETE``:
+``CREATE_COMPLETE``::
 
   $ heat stack-list
 
