@@ -174,7 +174,6 @@ def fixup_os_config(env):
     """Fixup nodes operating system configuration."""
     app = env.application
     ctrlname = env.config['tripleo']['controller_name']
-    compname = env.config['tripleo']['compute_name']
     # First update all the controllers with a ServerAlias.
     vncaddr = None
     updated = set()
