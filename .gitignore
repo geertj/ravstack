@@ -10,3 +10,5 @@ trash/
 *~
 .tox
 README.html
+share/iso
+share/ipxe.iso

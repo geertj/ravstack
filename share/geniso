@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -x
+
+IPXE="${IPXE_KERNEL:-/usr/share/ipxe/ipxe.lkrn}"
+ISOLINUX="${ISOLINUX:-/usr/share/syslinux/isolinux.bin}"
+
+test ! -r "$IPXE" && { echo "IPXE kernel not found. Set $$IPXE."; exit 1; }
+test ! -r "$ISOLINUX" && { echo "ISOLINUX not found. Set $$ISOLINUX"; exit 1; }
+
+mkdir -p iso
+cp -f "$IPXE" iso/ipxe.krn
+cp -f "$ISOLINUX" iso/isolinux.bin
+cp -f "$(basename $ISOLINUX)/ldlinux.c32" iso/ldlinux.c32
+cp -f isolinux.cfg iso/isolinux.cfg
+cp -f script.ipxe iso/script.pxe
+
+genisoimage -o ipxe.iso -b isolinux.bin -c boot.cat \
+        -no-emul-boot -boot-load-size 4 -boot-info-table \
+        -input-charset utf-8 iso
+isohybrid ipxe.iso

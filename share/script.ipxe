@@ -1,0 +1,12 @@
+#!ipxe
+#
+# Autoboot from DCHP, but reboot in case DHCP is not available.
+# This means that this will never boot from a local disk, unless
+# disk had a higher boot priority in the BIOS.
+
+prompt --key 0x02 --timeout 2000 Press Ctrl-B for the iPXE command line... && shell ||
+
+autoboot ||
+
+prompt --timeout 30000 Press any key to reboot... ||
+reboot
