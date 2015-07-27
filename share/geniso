@@ -11,7 +11,7 @@ test ! -r "$ISOLINUX" && { echo "ISOLINUX not found. Set $$ISOLINUX"; exit 1; }
 mkdir -p iso
 cp -f "$IPXE" iso/ipxe.krn
 cp -f "$ISOLINUX" iso/isolinux.bin
-cp -f "$(basename $ISOLINUX)/ldlinux.c32" iso/ldlinux.c32
+cp -f "$(dirname $ISOLINUX)/ldlinux.c32" iso/ldlinux.c32
 cp -f isolinux.cfg iso/isolinux.cfg
 cp -f script.ipxe iso/script.pxe
 
