@@ -4,3 +4,4 @@ flake8
 tox
 invoke
 twine
+docutils
