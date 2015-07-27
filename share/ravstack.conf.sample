@@ -28,11 +28,11 @@ password=<None>
 #min_runtime=120
 
 [proxy]
-# API Proxy keypair name.
+# API proxy keypair name.
 #key_name=id_ravstack
 
 # API proxy script.
-#proxy_name=~/bin/ironic-proxy
+#proxy_name=ironic-proxy
 
 [tripleo]
 # File name containing node definitions.
