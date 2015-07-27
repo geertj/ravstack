@@ -13,13 +13,13 @@ from setuptools import setup
 version_info = {
     'name': 'ravstack',
     'version': '1.0.0',
-    'description': 'Run OpenStack on Ravello',
+    'description': 'Run OpenStack on Ravello Systems.',
     'author': 'Geert Jansen',
     'author_email': 'geertj@gmail.com',
     'url': 'https://github.com/geertj/ravstack',
     'license': 'MIT',
     'classifiers': [
-        'Development Status :: 4 - Beta',
+        'Development Status :: 5 - Production/Stable',
         'License :: OSI Approved :: MIT License',
         'Operating System :: POSIX',
         'Programming Language :: Python :: 3.3',
