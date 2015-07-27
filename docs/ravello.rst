@@ -145,6 +145,22 @@ any name based virtual host.  For Apache you want to make sure your
 
   ServerAlias *.srv.ravcloud.com
 
+PXE Booting
+-----------
+
+PXE booting is not directly supported by Ravello, but can be made to work. To
+make it work you need to do the following:
+
+* Make sure that all the VMs on the boot network have a static IP configured.
+  This will tell Ravello not to provide a DHCP server on the network.
+* Provide your own DHCP and TFTP server with a proper configuration. The
+  relevant DCHP options are ``next-server`` and ``filename``.
+* Upload the iPXE boot CD-ROM and insert it into the VM's CD-ROM drive.
+* The "bootOrder" attribute in the Ravello API not respected by Ravello. A VM
+  will always boot from its disk first, and then from CD-ROM. You can work
+  around this by clearing and re-setting the "boot" flag on the disk. This will
+  allow you to boot from the network even if the disk as a boot loader
+  installed on it.
 
 .. _Ravello Systems: http://www.ravellosystems.com/
 .. _this patch: https://gist.github.com/geertj/7b134e24323e6990f804
