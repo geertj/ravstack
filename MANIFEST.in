@@ -5,4 +5,5 @@ include *requirements.txt
 include lib/ravstack/*.py
 include share/ravstack.conf.sample share/dnsmasq.conf
 include share/geniso share/isolinux.cfg share/script.ipxe
+include share/clean.sh
 include docs/*.rst
