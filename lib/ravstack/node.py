@@ -106,7 +106,7 @@ def create_node(env, new_name):
 
     # Network services: enable ssh on the same network interface as the controller.
     service = ravello.get_service(env.nodes[0], '22')
-    for ssh_idx,conn in enumerate(env.nodes[0]['networkConnections']):
+    for ssh_idx, conn in enumerate(env.nodes[0]['networkConnections']):
         if ravello.get_ip(conn) == service['ip']:
             break
     else:
