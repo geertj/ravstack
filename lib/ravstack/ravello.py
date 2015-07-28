@@ -108,7 +108,7 @@ def retry_operation(func, timeout=60, retries=None):
     while end_time > time.time():
         count += 1
         try:
-            func()
+            ret = func()
         except HTTPError as e:
             status = e.response.status_code
             if status not in retries:
@@ -128,7 +128,7 @@ def retry_operation(func, timeout=60, retries=None):
             time_spent = time.time() - start_time
             log.debug('Operation succeeded after {} attempt{} ({:.2f} seconds).'
                             .format(count, 's' if count > 1 else '', time_spent))
-            return
+            return ret
         loop_delay = delay + random.random()
         log.debug('Sleeping for {:.2f} seconds.'.format(loop_delay))
         time.sleep(loop_delay)
