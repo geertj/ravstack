@@ -104,14 +104,21 @@ def create_node(env, new_name):
                             'externalAccessState': icfg['externalAccessState'],
                             'staticIpConfig': scfg}})
 
-    # Network services: enable ssh on first network interface
-    first_ip = conns[0]['ipConfig']['staticIpConfig']['ip']
-    services = node['suppliedServices'] = []
-    services.append({'name': 'ssh',
-                     'portRange': '22',
-                     'protocol': 'TCP',
-                     'external': True,
-                     'ip': first_ip})
+    # Network services: enable ssh on the same network interface as the controller.
+    service = ravello.get_service(env.nodes[0], '22')
+    for ssh_idx,conn in enumerate(env.nodes[0]['networkConnections']):
+        if ravello.get_ip(conn) == service['ip']:
+            break
+    else:
+        ssh_idx = None
+    if ssh_idx is not None:
+        mgmt_ip = conns[ssh_idx]['ipConfig']['staticIpConfig']['ip']
+        services = node['suppliedServices'] = []
+        services.append({'name': 'ssh',
+                         'portRange': '22',
+                         'protocol': 'TCP',
+                         'external': True,
+                         'ip': mgmt_ip})
     return node
 
 
