@@ -70,7 +70,7 @@ def install_proxy(pubkey, command):
         keydata = fin.read()
     sshdir = os.path.join(util.get_homedir(), '.ssh')
     authentry = 'no-pty,no-port-forwarding,no-X11-forwarding,no-agent-forwarding'
-    authentry += ',command="{}" '.format(command)
+    authentry += ',command="{}",from="localhost" '.format(command)
     authentry += keydata
     authfile = os.path.join(sshdir, 'authorized_keys')
     with open(authfile, 'a') as fout:
