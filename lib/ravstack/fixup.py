@@ -105,7 +105,7 @@ def fixup_ravello(env):
         return
     env.client.call('PUT', '/applications/{id}'.format(**app), app)
     env.client.call('POST', '/applications/{id}/publishUpdates'.format(**app))
-    print('Fixed Ravello config for: {}.'.format(', '.join(sorted(updated))))
+    print('Fixed Ravello config for {} nodes.'.format(len(updated)))
 
 
 def add_httpd_server_alias(env, addr, nodename):
@@ -209,7 +209,7 @@ def fixup_os_config(env):
             updated.add(name)
     if not updated:
         return
-    print('Fixed OS config for: {}.'.format(', '.join(sorted(updated))))
+    print('Fixed OS config {} nodes.'.format(len(updated)))
 
 
 def do_fixup(env):
