@@ -133,10 +133,14 @@ Create an image in Glance::
   $ glance image-create --name fedora --file fedora-user.qcow2 \
         --disk-format qcow2 --container-format bare
 
-Setup overcloud networking. See the `Setup the overcloud network`_ section in
-the RDO-Manager docs. With the instructions there you will be able to launch an
-instance and access it over VNC. However for outbound access you need to create
-a router and a tenant network. TBD.
+Setup overcloud networking. The following creates a simple provider network. It
+will allow you to start up an instance, but not yet have it communicate to the
+outside world. TBD::
+
+  $ neutron net-create nova --router:external
+  $ neutron subnet-create --name nova --disable-dhcp \
+        --allocation-pool start=192.168.2.100,end=192.168.2.200 \
+        --gateway 192.168.2.1 nova 192.168.2.0/24
 
 Enable the undercloud Horizon for remote access. The image does not have the
 undercloud Horizon service exposed because it contains a pre-installed
@@ -167,4 +171,3 @@ Feel free to report issues on Github or mail me at geertj@gmail.com.
 .. _ManageIQ Page: https://www.ravellosystems.com/repo/profile/public/manageiq
 .. _Ravello Notes: https://github.com/geertj/ravstack/blob/master/docs/ravello.rst
 .. _RDO-Manager Notes: https://github.com/geertj/ravstack/blob/master/docs/rdomanager.rst
-.. _Setup the overcloud network: https://repos.fedorapeople.org/repos/openstack-m/docs/master/basic_deployment/basic_deployment.html#setup-the-overcloud-network
