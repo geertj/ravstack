@@ -21,6 +21,8 @@ then install ravstack on the RDO-Manager using::
   $ sudo pip3 install ravstack
   $ sudo ravstack config-create
   Created config file `/etc/ravstack/ravstack.conf`.
+  $ sudo mkdir /var/log/ravstack
+  $ sudo chown stack:stack /var/log/ravstack
   $ ravstack proxy-create
 
 Note that you need to have a working Python3 environment. Ravstack does not
@@ -57,7 +59,10 @@ On the undercloud VM, edit the file ``/etc/ravstack/ravstack.conf``. Change the
 username and password. Ravstack needs access to your account so that it can
 create new nodes and perform power control operations.
 
-Once this is done, create the nodes and add them to Ironic::
+Now create the nodes and add them to Ironic. You can create as many nodes are
+you want. The default networking range configured in RDO-Manager allows up to
+100 IPs for the nodes, and in addition 40 IPs for introspection (see below).
+The example below creates 3 nodes::
 
   $ ravstack node-create -n 3
   Created 3 nodes: node1, node2, node3.
@@ -67,8 +72,21 @@ Once this is done, create the nodes and add them to Ironic::
   $ source ~/stackrc
   $ openstack baremetal import --json instackenv.json
 
-The following commands might issue a few warnings that nodes are locked. The
-operation will retry automatically. This is OK and expected::
+The nodes should now be visible in Ironic (output abridged)::
+
+  $ ironic node-list
+  +--------------------------------------+-------------+-----------------+-------------+
+  | UUID                                 | Power State | Provision State | Maintenance |
+  +--------------------------------------+-------------+-----------------+-------------+
+  | cf30c3ba-7294-44cd-b835-664069289228 | power off   | available       | False       |
+  | e8f715b1-8c07-4361-8bb6-74dbe66dc134 | power off   | available       | False       |
+  | a12beebc-7e04-42e6-9f70-9fe9b585454f | power off   | available       | False       |
+  +--------------------------------------+-------------+-----------------+-------------+
+
+Configure the boot order for the nodes and start introspection. The following
+commands might issue a few warnings that nodes are locked. This is OK and
+expected. The operation will retry automatically. Introspection should take
+less than 10 minutes to complete::
 
   $ openstack baremetal configure boot
   $ openstack baremetal introspection bulk start
@@ -76,30 +94,63 @@ operation will retry automatically. This is OK and expected::
 We are now ready to deploy the overcloud. The following command may take up to
 an hour to complete::
 
-  $ openstack overcloud deploy --plan overcloud
+  $ openstack overcloud deploy --plan overcloud --compute-scale 2
 
 After the installation is done, you should see the overcloud in a state of
-``CREATE_COMPLETE``::
+``CREATE_COMPLETE`` (output abridged)::
 
   $ heat stack-list
+  +--------------------------------------+------------+-----------------+
+  | id                                   | stack_name | stack_status    |
+  +--------------------------------------+------------+-----------------+
+  | 8e53c52f-8a02-4a7a-9ef8-4de530e37ff4 | overcloud  | CREATE_COMPLETE |
+  +--------------------------------------+------------+-----------------+
 
-A post install step is required. Ravello has a split inside/outside networking
-model, where VMs on the inside communicate with the outside through one of the
-available NAT options. The following command will set up the required port
-mappings and makes some re-configurations on the installed nodes::
+A post install step is required. The VMs in a Ravello application are connected
+by an isolated network, and they communicate with the outside through one of
+the available NAT options. The following command will set up the required port
+mappings and makes sure that Horizon and the VNC proxy have the correct
+configuration::
 
   $ ravstack fixup
+  Fixed Ravello config for 3 nodes.
+  Fixed OS config for 3 nodes.
 
 That's it! You now have a working undercloud and overcloud.
 
 * To access the undercloud from the CLI, source the file ``~/stackrc`` on the
   undercloud VM, and use any of the available OpenStack commands.
-* To access the undercloud from Horizon, go to the Ravello web UI and open the
-  "http" server on the "undercloud" VM.
-* To access the Overcloud from the CLI, source the file ``~/overcloudrc`` on
+* To access the overcloud from the CLI, source the file ``~/overcloudrc`` on
   the undercloud VM, and use any of the available OpenStack commands.
-* To access the Overcloud Horizon, go to the Ravello web UI, and open the
+* To access the overcloud Horizon, go to the Ravello web UI, and open the
   "http" service on the "overcloud-controller-1" VM.
+
+**NOTE**: the following post-installation steps still remain to be done to make
+the installation useful. These will be automated soon:
+
+Create an image in Glance::
+
+  $ glance image-create --name fedora --file fedora-user.qcow2 \
+        --disk-format qcow2 --container-format bare
+
+Setup overcloud networking. See the `Setup the overcloud network`_ section in
+the RDO-Manager docs. With the instructions there you will be able to launch an
+instance and access it over VNC. However for outbound access you need to create
+a router and a tenant network. TBD.
+
+Enable the undercloud Horizon for remote access. The image does not have the
+undercloud Horizon service exposed because it contains a pre-installed
+undercloud with fixed passwords. To enable this service, either we need to
+change all password (can this be done easily?) or maybe more simply, install a
+unique random password at the Apache level.
+
+Documentation
+-------------
+
+In addition to this README, the following documents exist:
+
+* `Ravello Notes`_ - Some notes on working with Ravello.
+* `RDO-Manager Notes`_ - Some notes on working with RDO Manager.
 
 Comments
 --------
@@ -114,3 +165,6 @@ Feel free to report issues on Github or mail me at geertj@gmail.com.
 .. _EPEL: https://fedoraproject.org/wiki/EPEL
 .. _Ravello Repo: https://www.ravellosystems.com/repo/profile/public/manageiq
 .. _ManageIQ Page: https://www.ravellosystems.com/repo/profile/public/manageiq
+.. _Ravello Notes: https://github.com/geertj/ravstack/blob/master/docs/ravello.rst
+.. _RDO-Manager Notes: https://github.com/geertj/ravstack/blob/master/docs/rdomanager.rst
+.. _Setup the overcloud network: https://repos.fedorapeople.org/repos/openstack-m/docs/master/basic_deployment/basic_deployment.html#setup-the-overcloud-network
