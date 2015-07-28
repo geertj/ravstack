@@ -212,9 +212,21 @@ def fixup_os_config(env):
     print('Fixed OS config {} nodes.'.format(len(updated)))
 
 
+def wait_and_reload(client, app):
+    """Wait until all VMs are in the STARTED state."""
+    def wait_for_vms_ready():
+        nonlocal app
+        app = client.call('GET', '/applications/{id}'.format(**app))
+        for vm in ravello.get_vms(app):
+            if vm['state'] != 'STARTED':
+                raise ravello.Retry('Node `{name}` in state `{state}`.'.format(**vm))
+    ravello.retry_operation(wait_for_vms_ready)
+    return app
+
+
 def do_fixup(env):
     """The `ravstack fixup` command."""
     env.mac_map = build_mac_map(env.nova_under)
     fixup_ravello(env)
-    del env.application  # reload
+    env.application = wait_and_reload(env.client, env.application)
     fixup_os_config(env)
