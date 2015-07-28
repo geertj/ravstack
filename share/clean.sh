@@ -13,3 +13,4 @@ find /var/lib/cloud -type f | xargs rm -f
 rm -f /var/lib/dhclient/*.lease
 
 updatedb
+sync
