@@ -93,8 +93,8 @@ def do_create(env):
     proxyfile = create_proxy(proxyname)
     install_proxy(keyfile + '.pub', proxyfile)
     test_proxy(keyfile)
-    print('Private key created as: ~/.ssh/{}'.format(keyname))
-    print('Proxy created at: ~/bin/{}'.format(proxyname))
+    print('Private key created as: `~/.ssh/{}`.'.format(keyname))
+    print('Proxy created at: `~/bin/{}`.'.format(proxyname))
 
 
 # proxy-run command
