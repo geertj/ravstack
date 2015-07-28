@@ -11,31 +11,15 @@ installers, such as RDO-Manager_. Ravstack offers:
 * Commands to do certain post-install fixups requires because of the split
   inside/outside network offered by Ravello.
 
-Installing RDO-Manager
-----------------------
+Installation
+------------
 
-The hard way to install ravstack is to create a new CentOS VM in a new Ravello
-application, and install RDO-Manager per its `installation instructions`_. You
-then install ravstack on the RDO-Manager using::
+The recommended way is to download an already pre-configured undercloud VM from
+the `Ravello Repo`_. The VM contains an installed RDO-Manager with pre-built
+bare metal images and has ravstack installed and configured.
 
-  $ sudo pip3 install ravstack
-  $ sudo ravstack config-create
-  Created config file `/etc/ravstack/ravstack.conf`.
-  $ sudo mkdir /var/log/ravstack
-  $ sudo chown stack:stack /var/log/ravstack
-  $ ravstack proxy-create
-
-Note that you need to have a working Python3 environment. Ravstack does not
-work with Python 2.x. The easiest is to use the ``python34`` package from
-EPEL_.
-
-The recommended way however is to download an already pre-configured undercloud
-image from the `Ravello Repo`_. The image contains an installed RDO-Manager
-with configured bare metal images and has ravstack installed and configured.
-This installation method is what we will assume for the rest of this document.
-
-Installing From the Ravello Repo
---------------------------------
+Installing from the Ravello Repo
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 First step is to get the required images and create a new Ravello application:
 
@@ -147,6 +131,31 @@ undercloud Horizon service exposed because it contains a pre-installed
 undercloud with fixed passwords. To enable this service, either we need to
 change all password (can this be done easily?) or maybe more simply, install a
 unique random password at the Apache level.
+
+Installing from Scratch
+~~~~~~~~~~~~~~~~~~~~~~~
+
+If you want to RDO-Manager yourself then that is possible as well. You need to
+start by installing a new CentOS VM in Ravello, and after that you need to
+following the RDO-Manager `installation instructions`_. Also make sure you read
+the `Ravello Notes`_ and `RDO-Manager Notes`_. Installation of ravstack
+itself::
+
+  $ sudo pip3 install ravstack
+  $ sudo ravstack config-create
+  Created config file `/etc/ravstack/ravstack.conf`.
+  $ sudo mkdir /var/log/ravstack
+  $ sudo chown stack:stack /var/log/ravstack
+  $ ravstack proxy-create
+  Private key created as: `~/.ssh/id_ravstack`.
+  Proxy created at: `~/bin/ironic-proxy`.
+
+Note that you need to have a working Python3 environment. Ravstack does not
+work with Python 2.x. The easiest is to use the ``python34`` package from
+EPEL_.
+
+Once you've installed ravstack, follow the instructions for installing from the
+Ravello Repo above.
 
 Documentation
 -------------
