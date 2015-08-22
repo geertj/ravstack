@@ -6,13 +6,14 @@
 # Copyright (c) 2015 the ravstack authors. See the file "AUTHORS" for a
 # complete list.
 
-import re
 import os
+import sys
 import shlex
 import subprocess
 import textwrap
+import re
 
-from . import util, node
+from . import util, logging, factory, node
 
 
 # proxy-create command
@@ -56,7 +57,7 @@ def create_proxy(proxyname):
             #!/bin/sh
             {}
             {}
-            exec ravstack proxy-run
+            exec python -mravstack.proxy
             """).format(enable_scls, enable_venv)
     with open(proxyfile, 'w') as fout:
         fout.write(contents)
@@ -70,7 +71,7 @@ def install_proxy(pubkey, command):
         keydata = fin.read()
     sshdir = os.path.join(util.get_homedir(), '.ssh')
     authentry = 'no-pty,no-port-forwarding,no-X11-forwarding,no-agent-forwarding'
-    authentry += ',command="{}",from="localhost" '.format(command)
+    authentry += ',command="{}",from="127.0.0.1,::1" '.format(command)
     authentry += keydata
     authfile = os.path.join(sshdir, 'authorized_keys')
     with open(authfile, 'a') as fout:
@@ -130,9 +131,11 @@ def parse_virsh_command_line(command):
     raise RuntimeError('unrecognized command: {}'.format(command))
 
 
-def do_run(env):
-    """The `proxy-run` command."""
+def _main():
+    """Proxy main function."""
+    env = factory.get_environ()
     log = env.logger
+
     command = os.environ.get('SSH_ORIGINAL_COMMAND')
     if command is None:
         raise RuntimeError('This command needs to be run through ssh.')
@@ -161,3 +164,20 @@ def do_run(env):
         node.do_set_boot_device(env, cmdline[2], cmdline[1])
     elif cmdline[0] == 'get_node_macs':
         node.do_get_macs(env, cmdline[1], True)
+
+
+def main():
+    """Wrapper for _main()."""
+    try:
+        _main()
+    except Exception as e:
+        log = logging.get_logger()
+        log.error('Uncaught exception:', exc_info=True)
+        if logging.get_debug() and not logging.get_verbose():
+            raise
+        sys.stdout.write('Error: {!s}\n'.format(e))
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

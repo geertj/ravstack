@@ -11,7 +11,6 @@
 Usage:
   ravstack [options] config-create
   ravstack [options] proxy-create
-  ravstack [options] proxy-run
   ravstack [options] node-create [-c <cpus>] [-m <memory>]
                                 [-D <disk>] [-n <count>]
   ravstack [options] node-dump
@@ -28,7 +27,6 @@ Usage:
 Command help:
   config-create         Create ravstack configuration file.
   proxy-create          Create SSH -> Ravello API proxy.
-  proxy-run             Run the API proxy.
   node-create           Create a new node.
   node-dump             Dump node definitions to specified file.
   node-list             List powered on nodes. (--all lists all nodes)
@@ -68,7 +66,7 @@ Options for `node-create`:
 import sys
 import docopt
 
-from . import logging, factory
+from . import logging, factory, config, node, proxy, fixup
 
 
 def _main():
@@ -76,27 +74,10 @@ def _main():
     args = docopt.docopt(__doc__)
     env = factory.get_environ(args)
 
-    # On-demand imports for faster startup time.
-    # The "proxy-run" command is used a *lot* by Ironic.
-
-    for key, value in args.items():
-        if not value:
-            continue
-        if key.startswith('config-'):
-            from . import config
-        elif key.startswith('proxy-'):
-            from . import proxy
-        elif key.startswith('node-'):
-            from . import node
-        elif key.startswith('fixup'):
-            from . import fixup
-
     if args['config-create']:
         config.do_create(env)
     elif args['proxy-create']:
         proxy.do_create(env)
-    elif args['proxy-run']:
-        proxy.do_run(env)
     elif args['node-create']:
         node.do_create(env)
     elif args['node-dump']:
