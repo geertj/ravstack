@@ -1,7 +1,7 @@
 include setup.py tasks.py
 include setup.cfg tox.ini
 include AUTHORS LICENSE README.rst MANIFEST.in
-include *requirements.txt
+include requirements*.txt
 include lib/ravstack/*.py
 include share/ravstack.conf.sample share/dnsmasq.conf
 include share/geniso share/isolinux.cfg share/script.ipxe
