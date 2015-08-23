@@ -142,6 +142,7 @@ def get_environ(args=None):
     if args is None:
         args = {}
     env = Environment()
+    env.logger = logging.get_logger()
     cfg = config.parse_config()
     config.update_from_args(cfg, args)
     update_from_ravello_config(cfg)
@@ -149,7 +150,6 @@ def get_environ(args=None):
         logging.set_debug()
     if cfg['DEFAULT'].getboolean('verbose'):
         logging.set_verbose()
-    env.logger = logging.get_logger()
     env.config = cfg
     env.args = args
     env.lazy_attr('client', lambda: get_ravello_client(env))

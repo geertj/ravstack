@@ -70,10 +70,20 @@ import docopt
 
 from . import logging, factory, config, node, proxy, fixup
 
+LOG = logging.get_logger()
 
-def _main():
+
+def main():
     """Ravstack main entry point."""
+
+    logging.setup_logging()
+
     args = docopt.docopt(__doc__)
+    if args['--debug']:
+        logging.set_debug()
+    if args['--verbose']:
+        logging.set_verbose()
+
     env = factory.get_environ(args)
 
     if args['config-create']:
@@ -104,18 +114,12 @@ def _main():
         fixup.do_fixup(env)
 
 
-def main():
-    """Main wrapper function. Calls _main() and handles exceptions."""
+if __name__ == '__main__':
     try:
-        _main()
+        main()
     except Exception as e:
-        log = logging.get_logger()
-        log.error('Uncaught exception:', exc_info=True)
+        LOG.error('Uncaught exception:', exc_info=True)
         if logging.get_debug() and not logging.get_verbose():
             raise
         sys.stdout.write('Error: {!s}\n'.format(e))
         sys.exit(1)
-
-
-if __name__ == '__main__':
-    main()

@@ -25,6 +25,7 @@ def get_debug():
 def set_debug(enabled=True):
     """Enable the $DEBUG environment variable."""
     os.environ['DEBUG'] = '1' if enabled else '0'
+    update_logging_levels()
 
 
 def get_verbose():
@@ -34,6 +35,7 @@ def get_verbose():
 def set_verbose(enabled=True):
     """Enable the $VERBOSE environment variable."""
     os.environ['VERBOSE'] = '1' if enabled else '0'
+    update_logging_levels()
 
 
 def get_log_file():
@@ -49,15 +51,19 @@ def get_log_file():
         return logfile
 
 
+def get_logger():
+    """Return the shared logger."""
+    return logging.getLogger('ravstack')
+
+
 _template = '%(asctime)s %(levelname)s [%(name)s] %(message)s'
 _ssh_template = '%(asctime)s %(levelname)s [{}] [%(name)s] %(message)s'
 
-def get_logger():
+def setup_logging():
     """Set up logging."""
     root = logging.getLogger()
-    logger = logging.getLogger('ravstack')
     if root.handlers:
-        return logger
+        return
     # If running under SSH, show connection information (for debugging)
     if os.environ.get('SSH_ORIGINAL_COMMAND'):
         ssh_conn = os.environ.get('SSH_CONNECTION', '?:?')
@@ -67,24 +73,30 @@ def get_logger():
         template = _ssh_template.format(':'.join(parts[:2]))
     else:
         template = _template
-    if get_verbose():
-        handler = logging.StreamHandler(sys.stderr)
-        root.addHandler(handler)
-        handler.setFormatter(logging.Formatter(template))
+    # The stderr handler is always present, but only enabled in verbose mode.
+    handler = logging.StreamHandler(sys.stderr)
+    root.addHandler(handler)
+    handler.setFormatter(logging.Formatter(template))
+    # The logfile handlers is present only if a writable log file is available.
     logfile = get_log_file()
     if logfile:
         handler = logging.FileHandler(logfile)
         root.addHandler(handler)
         handler.setFormatter(logging.Formatter(template))
-    if not root.handlers:
-        handler = logging.NullHandler()
-        root.addHandler(handler)
+    update_logging_levels()
+
+
+def update_logging_levels():
+    """Update loging levels based on $DEBUG and $VERBOSE."""
+    root = logging.getLogger()
     root.setLevel(logging.DEBUG if get_debug() else logging.INFO)
+    # The stdout handler.
+    handler = root.handlers[0]
+    handler.setLevel(logging.DEBUG if get_verbose() else logging.CRITICAL)
     # A little less verbosity for requests.
-    sublogger = logging.getLogger('requests.packages.urllib3.connectionpool')
-    sublogger.setLevel(logging.DEBUG if get_debug() else logging.WARNING)
+    logger = logging.getLogger('requests.packages.urllib3.connectionpool')
+    logger.setLevel(logging.DEBUG if get_debug() else logging.WARNING)
     # Silence "insecure platform" warning for requests module on Py2.7.x.
     logging.captureWarnings(True)
-    sublogger = logging.getLogger('py.warnings')
-    sublogger.setLevel(logging.ERROR)
-    return logger
+    logger = logging.getLogger('py.warnings')
+    logger.setLevel(logging.ERROR)
