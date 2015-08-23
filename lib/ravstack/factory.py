@@ -87,11 +87,13 @@ def get_nodes(app):
     for vm in ravello.get_vms(app):
         if not vm.get('networkConnections'):
             continue
+        conn = vm['networkConnections'][0]
+        if not conn.get('ipConfig', {}).get('staticIpConfig'):
+            continue
         nodes.append(copy.deepcopy(vm))
     # Sort the nodes by IP of the first network connection. By convention
     # the undercloud node has the lowest IP.
-    nodes.sort(key=lambda vm: util.inet_aton(vm['networkConnections'][0]
-                                               ['ipConfig']['staticIpConfig']['ip']))
+    nodes.sort(key=lambda vm: util.inet_aton(ravello.get_ip(vm['networkConnections'][0])))
     return nodes
 
 
