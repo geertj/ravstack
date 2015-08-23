@@ -65,6 +65,16 @@ def can_open(fname, mode='r'):
         return False
 
 
+def try_unlink(fname):
+    """Try to unlink a file but do not raise an error if the file does not
+    exist."""
+    try:
+        os.unlink(fname)
+    except OSError as e:
+        if e.errno != errno.ENOENT:
+            raise
+
+
 def mask_dict(d, *names):
     """Mask certain values in a dict."""
     m = {}

@@ -22,6 +22,8 @@ Usage:
   ravstack [options] node-set-boot-device <node> <bootdev>
   ravstack [options] node-get-macs <node> [--cached]
   ravstack [options] fixup
+  ravstack [options] endpoint-resolve <port> [-t <timeout>]
+                     [--start-port <base>] [--num-ports <count>]
   ravstack --help
 
 Command help:
@@ -39,28 +41,38 @@ Command help:
   node-get-macs         Return MAC addresses for <node>.
   fixup                 Fix Ravello and OS config after one or
                         more nodes were deployed.
+  endpoint-resolve      Resolve an endpoint for a local service using
+                        a public IP address or under portmapping.
 
 Options:
-  -d, --debug       Enable debugging.
-  -v, --verbose     Be verbose (shows logging output on stdout)
+  -d, --debug           Enable debugging.
+  -v, --verbose         Be verbose (shows logging output on stdout)
   -u <username>, --username=<username>
-                    Ravello API username.
+                        Ravello API username.
   -p <password>, --password=<password>
-                    Ravello API password.
+                        Ravello API password.
   -a <application>, --application=<application>
-                    The Ravello application name.
-  --all             List all nodes.
-  --cached          Allow use of cached information.
+                        The Ravello application name.
+  --all                 List all nodes.
+  --cached              Allow use of cached information.
 
 Options for `node-create`:
   -c <cpus>, --cpus=<cpus>
-                    The number of CPUs. [default: 2]
+                        The number of CPUs. [default: 2]
   -m <memory>, --memory=<memory>
-                    The amount of memory in MB. [default: 8192]
+                        The amount of memory in MB. [default: 8192]
   -D <disk>, --disk=<disk>
-                    The size of the disk in GB. [default: 60]
+                        The size of the disk in GB. [default: 60]
   -n <count>, --count=<count>
-                    The number of nodes to create. [default: 1]
+                        The number of nodes to create. [default: 1]
+
+Options for `endpoint-resolve`:
+  -t <timeout>, --timeout <timeout>
+                        Timeout. [default: 2]
+  --start-port <port>   Starting port for endpoint resolution with
+                        portmapping. [default: 10000]
+  --num-ports <count>   Number of ports to scan for endpoint resulution
+                        with portmapping. [default: 50]
 """
 
 from __future__ import absolute_import, print_function
@@ -68,7 +80,7 @@ from __future__ import absolute_import, print_function
 import sys
 import docopt
 
-from . import logging, factory, config, node, proxy, fixup
+from . import logging, factory, config, node, proxy, fixup, endpoint
 
 LOG = logging.get_logger()
 
@@ -112,6 +124,8 @@ def main():
         node.do_get_macs(env, args['<node>'], False)
     elif args['fixup']:
         fixup.do_fixup(env)
+    elif args['endpoint-resolve']:
+        endpoint.do_resolve(env, args['<port>'])
 
 
 if __name__ == '__main__':
