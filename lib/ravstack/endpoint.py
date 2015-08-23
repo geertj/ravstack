@@ -75,8 +75,19 @@ def find_in_connection_table(addr):
     return sock_addr
 
 
-def find_external_endpoints(services, timeout=None, base=None, nports=None):
-    """Find the external endpoints for a set of services.
+def get_port_candidates(ports, base=None, nports=None):
+    """Return a list of port mapping candidates."""
+    if base is None:
+        base = _default_base
+    if nports is None:
+        nports = _default_nports
+    # Add both the ports themselves as well as the default portmapping range.
+    # This makes the approach work when used with both public IPs and portmapping.
+    return list(ports) + list(range(base, base+nports))
+
+
+def find_external_endpoints(ports, candidates, timeout=None):
+    """Find the external endpoints for a set of ports.
 
     The *services* argument must be a list of port numbers. The *timeout*
     parameter is the total time to spend for discovery.  The *low* and *high*
@@ -98,10 +109,6 @@ def find_external_endpoints(services, timeout=None, base=None, nports=None):
 
     if timeout is None:
         timeout = _default_timeout
-    if base is None:
-        base = _default_base
-    if nports is None:
-        nports = _default_nports
 
     # First we do a non-blocking connect on all candidate ports in parallel.
     # Candidate ports are in the range from low to high, and also the ports
@@ -111,8 +118,7 @@ def find_external_endpoints(services, timeout=None, base=None, nports=None):
     LOG.debug('my public IP: `{}`.'.format(publicip))
 
     sockets = {}
-    services = list(services)
-    candidates = list(range(base, base+nports)) + services
+    ports = list(ports)
 
     for cport in candidates:
         sock = socket.socket()
@@ -157,14 +163,14 @@ def find_external_endpoints(services, timeout=None, base=None, nports=None):
                 saddr = find_in_connection_table(paddr)
                 if saddr:
                     LOG.debug('Found in connection table: `{}:{}`.'.format(*saddr))
-                if saddr and saddr[1] in services:
+                if saddr and saddr[1] in ports:
                     endpoints[saddr[1]] = (publicip, cport)
-                    services.remove(saddr[1])
+                    ports.remove(saddr[1])
             except socket.error:
                 pass
             sock.close()
             del sockets[fd]
-        if not services or not sockets:
+        if not ports or not sockets:
             break
 
     # Clean up remaining sockets and return the result.
@@ -182,7 +188,8 @@ def do_resolve(env, port):
     base = args.require_int(env.args, '--start-port', minval=0, maxval=65535)
     nports = args.require_int(env.args, '--num-ports', minval=0, maxval=1000)
 
-    endpoints = find_external_endpoints([port], timeout, base, nports)
+    candidates = get_port_candidates([port], base, nports)
+    endpoints = find_external_endpoints([port], candidates, timeout)
 
     if not endpoints:
         sys.exit(1)
