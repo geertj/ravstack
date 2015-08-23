@@ -6,6 +6,8 @@
 # Copyright (c) 2015 the ravstack authors. See the file "AUTHORS" for a
 # complete list.
 
+from __future__ import absolute_import, print_function
+
 import os
 import sys
 import json
@@ -294,13 +296,14 @@ def do_start(env, nodename):
         log.debug('Expiration less than minimum requested, extending runtime.')
         retry_operation(extend_runtime)
     # Now start it up, taking into account the current vm state.
-    is_retry = False
+    is_retry = [False]  # nonlocal
     def start_vm():
-        nonlocal app, is_retry
         # Reload because someone else could have changed the application.
-        if is_retry:
+        app = env.application
+        if is_retry[0]:
             app = env.client.call('GET', '/applications/{id}'.format(**app))
-        is_retry = True
+            env.application = app
+        is_retry[0] = True
         vm = get_vm(app, nodename)
         log.debug('Node `{name}` is in state `{state}`.'.format(**vm))
         state = vm['state']
@@ -317,10 +320,11 @@ def do_start(env, nodename):
             design_vm = get_vm(app, nodename, 'design')
             set_current_boot_device(design_vm, bootdev)
             clear_next_boot_device(design_vm)
-            env.client.call('PUT', '/applications/{id}'.format(**app), app)
+            app = env.client.call('PUT', '/applications/{id}'.format(**app), app)
             env.client.call('POST', '/applications/{id}/publishUpdates'.format(**app))
+            env.application = app
         env.client.call('POST', '/applications/{app[id]}/vms/{vm[id]}/start'
-                                    .format(app=env.application, vm=vm))
+                                    .format(app=app, vm=vm))
     # According to the docs, 400 means the application is in the middle of
     # another action, but I get 409 instead.
     # Retry just 3 times in case of HTTP errors. The start_vm function will not
@@ -329,19 +333,18 @@ def do_start(env, nodename):
     # started up the VM concurrently.
     log.debug('Starting node `{}`.'.format(nodename))
     retry_operation(start_vm, 1200, {400: 3, 403: 3, 409: 3})
-    env.application = app
 
 
 def do_stop(env, nodename):
     """The `node-stop` command."""
     log = env.logger
-    app = env.application
-    is_retry = False
+    is_retry = [False]  # nonlocal
     def stop_vm():
-        nonlocal app, is_retry
-        if is_retry:
+        app = env.application
+        if is_retry[0]:
             app = env.client.call('GET', '/applications/{id}'.format(**app))
-        is_retry = True
+            env.application = app
+        is_retry[0] = True
         vm = get_vm(app, nodename)
         log.debug('Node `{name}` is in state `{state}`.'.format(**vm))
         state = vm['state']
@@ -357,7 +360,6 @@ def do_stop(env, nodename):
                                     .format(app=env.application, vm=vm))
     log.debug('Stopping node `{}`.'.format(nodename))
     retry_operation(stop_vm, 1200, {400: 3, 403: 3, 409: 3})
-    env.application = app
 
 
 def do_reboot(env, nodename):
@@ -433,13 +435,13 @@ def do_get_boot_device(env, nodename):
 def do_set_boot_device(env, nodename, bootdev):
     """Set the boot device for *nodename* to *bootdev*."""
     log = env.logger
-    app = env.application
-    is_retry = False
+    is_retry = [False]  # nonlocal
     def set_boot_device():
-        nonlocal app, is_retry
-        if is_retry:
+        app = env.application
+        if is_retry[0]:
             app = env.client.call('GET', '/applications/{id}'.format(**app))
-        is_retry = True
+            env.application = app
+        is_retry[0] = True
         vm = get_vm(app, nodename)
         current = get_boot_device(vm)
         if current == bootdev:
@@ -461,11 +463,11 @@ def do_set_boot_device(env, nodename, bootdev):
         else:
             set_next_boot_device(design_vm, bootdev)
             log.debug('Setting next boot device to `{}`.'.format(bootdev))
-        env.client.call('PUT', '/applications/{id}'.format(**app), app)
+        app = env.client.call('PUT', '/applications/{id}'.format(**app), app)
         env.client.call('POST', '/applications/{id}/publishUpdates'.format(**app))
+        env.application = app
     log.debug('Setting boot device for node `{}` to `{}`'.format(nodename, bootdev))
     retry_operation(set_boot_device, 1200, {400: 3, 403: 3, 409: 3})
-    env.application = app
 
 
 def do_get_macs(env, nodename, virsh_format=False):

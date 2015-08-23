@@ -6,13 +6,15 @@
 # Copyright (c) 2015 the ravstack authors. See the file "AUTHORS" for a
 # complete list.
 
+from __future__ import absolute_import, print_function
+
 import json
 import copy
 
 from . import ravello, config, logging, util
 
 
-class Environment:
+class Environment(object):
     """Environment used to pass per invocation variables."""
 
     def __init__(self):

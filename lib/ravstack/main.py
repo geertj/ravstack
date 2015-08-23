@@ -63,6 +63,8 @@ Options for `node-create`:
                     The number of nodes to create. [default: 1]
 """
 
+from __future__ import absolute_import, print_function
+
 import sys
 import docopt
 

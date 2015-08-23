@@ -6,8 +6,10 @@
 # Copyright (c) 2015 the ravstack authors. See the file "AUTHORS" for a
 # complete list.
 
+from __future__ import absolute_import, print_function
+
 import textwrap
-from urllib.parse import urlparse
+from six.moves.urllib.parse import urlparse
 
 from . import ravello, util
 
@@ -214,14 +216,14 @@ def fixup_os_config(env):
 
 def wait_and_reload(client, app):
     """Wait until all VMs are in the STARTED state."""
+    app = [app]  # nonlocal
     def wait_for_vms_ready():
-        nonlocal app
-        app = client.call('GET', '/applications/{id}'.format(**app))
+        app[0] = client.call('GET', '/applications/{id}'.format(**app))
         for vm in ravello.get_vms(app):
             if vm['state'] != 'STARTED':
                 raise ravello.Retry('Node `{name}` in state `{state}`.'.format(**vm))
     ravello.retry_operation(wait_for_vms_ready)
-    return app
+    return app[0]
 
 
 def do_fixup(env):

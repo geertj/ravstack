@@ -6,6 +6,8 @@
 # Copyright (c) 2015 the ravstack authors. See the file "AUTHORS" for a
 # complete list.
 
+from __future__ import absolute_import, print_function
+
 import os
 from configparser import ConfigParser, ExtendedInterpolation
 
@@ -16,7 +18,7 @@ _config_name = 'ravstack.conf'
 _system_config = '/etc/ravstack'
 
 _default_config = [
-    # section, name, default, required, description, env var, cli arg
+    # section, name, default, required, description, env, arg
     ('DEFAULT', 'debug', 'False', False, 'Enable debugging.', 'DEBUG', '--debug'),
     ('DEFAULT', 'verbose', 'False', False,
             'Be verbose (shows logging on stdout).', 'VERBOSE', '--verbose'),
@@ -50,7 +52,7 @@ def parse_config():
     config = ConfigParser(default_section='__default__',
                           interpolation=ExtendedInterpolation())
     # First splice in defaults.
-    for section, name, default, *rest in _default_config:
+    for section, name, default, req, desc, env, arg in _default_config:
         if section not in config:
             config.add_section(section)
         config[section][name] = default
@@ -60,7 +62,7 @@ def parse_config():
         prefixes.append(os.environ['VIRTUAL_ENV'])
     config.read((os.path.join(prefix, _config_name) for prefix in prefixes))
     # Read from environment variables
-    for section, name, *skip, env, cli in _default_config:
+    for section, name, default, req, desc, env, arg in _default_config:
         if not env or env not in os.environ:
             continue
         config[section][name] = os.environ[env]
@@ -69,9 +71,9 @@ def parse_config():
 
 def update_from_args(config, args):
     """Update *config* with values specified in *args*."""
-    for section, name, *skip, env, cli in _default_config:
-        if args.get(cli) not in (None, False):
-            config[section][name] = str(args[cli])
+    for section, name, default, req, desc, env, arg in _default_config:
+        if args.get(arg) not in (None, False):
+            config[section][name] = str(args[arg])
 
 
 def require(config, section, key):
@@ -124,7 +126,3 @@ def do_create(env):
     with open(cfgname, 'w') as fout:
         dump_defaults(fout)
     print('Created config file `{}`.'.format(cfgname))
-
-
-if __name__ == '__main__':
-    dump_defaults()

@@ -6,7 +6,10 @@
 # Copyright (c) 2015 the ravstack authors. See the file "AUTHORS" for a
 # complete list.
 
+from __future__ import absolute_import, print_function
+
 import os
+import sys
 from setuptools import setup
 
 
@@ -22,6 +25,7 @@ version_info = {
         'Development Status :: 5 - Production/Stable',
         'License :: OSI Approved :: MIT License',
         'Operating System :: POSIX',
+        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4'
     ]
@@ -35,7 +39,13 @@ def get_requirements():
     lines = []
     with open(os.path.join(topdir, 'requirements.txt')) as fin:
         for line in fin:
-            lines.append(line.rstrip())
+            if ' ' not in line:
+                lines.append(line.rstrip())
+    if sys.version_info[0] == 2:
+        with open(os.path.join(topdir, 'requirements-27.txt')) as fin:
+            for line in fin:
+                if ' ' not in line:
+                    lines.append(line.rstrip())
     return lines
 
 
