@@ -33,7 +33,7 @@ _default_config = [
     ('ravello', 'min_runtime', '120', False,
             'Minimum application runtime (in minutes).', None, None),
     ('proxy', 'key_name', 'id_ravstack', False, 'API proxy keypair name.', None, None),
-    ('proxy', 'proxy_name', 'ironic-proxy', False, 'API proxy script.', None, None),
+    ('proxy', 'proxy_name', 'ravstack-proxy', False, 'API proxy script.', None, None),
     ('tripleo', 'nodes_file', '~/instackenv.json', False,
             'File name containing node definitions.', None, None),
     ('tripleo', 'undercloud_env', '~/stackrc', False, 'Undercloud rc file.', None, None),
