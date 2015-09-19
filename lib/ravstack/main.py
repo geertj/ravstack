@@ -77,7 +77,6 @@ Options for `endpoint-resolve`:
 
 from __future__ import absolute_import, print_function
 
-import sys
 import docopt
 
 from . import logging, factory, config, node, proxy, fixup, endpoint, run

@@ -8,6 +8,7 @@
 
 from __future__ import absolute_import, print_function
 
+__all__ = ['urlparse']
 
 # The six version shipped with CentOS 7 is too old. It doesn't have
 # six.moves.urllib.parse.
