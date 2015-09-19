@@ -51,12 +51,9 @@ def get_requirements():
 
 
 if __name__ == '__main__':
-    sharedir = os.environ.get('VIRTUAL_ENV', '/usr/share')
-    docpath = os.path.join(sharedir, 'doc', 'ravstack')
     setup(
         packages=['ravstack'],
         package_dir={'': 'lib'},
-        data_files=[(docpath, ['README.rst', 'share/ovirt-display-hook.py'])],
         install_requires=get_requirements(),
         entry_points={'console_scripts': ['ravstack = ravstack.main:main']},
         **version_info)
