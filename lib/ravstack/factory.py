@@ -45,7 +45,7 @@ def get_ravello_client(env):
     """Return a API client connection."""
     username = config.require(env.config, 'ravello', 'username')
     password = config.require(env.config, 'ravello', 'password')
-    client = ravello.RavelloApi()
+    client = ravello.RavelloClient()
     try:
         client.login(username, password)
     except ravello.HTTPError:

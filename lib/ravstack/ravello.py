@@ -24,7 +24,7 @@ magic_svm_cpuids = [
     {"index": "80000001", "value": "00000000000000000000001520100800"}, ]
 
 
-class RavelloApi(Session):
+class RavelloClient(Session):
     """
     A super minimal interface to the Ravello API, based on ``requests.Session``.
     """
@@ -35,7 +35,7 @@ class RavelloApi(Session):
     default_redirects = 3
 
     def __init__(self):
-        super(RavelloApi, self).__init__()
+        super(RavelloClient, self).__init__()
         self.headers['Accept'] = 'application/json'
         self.max_redirects = self.default_redirects
         adapter = HTTPAdapter(max_retries=self.default_retries)
@@ -78,7 +78,7 @@ class RavelloApi(Session):
             url = self.default_url + url
         if 'timeout' not in kwargs:
             kwargs['timeout'] = self.default_timeout
-        return super(RavelloApi, self).request(method, url, **kwargs)
+        return super(RavelloClient, self).request(method, url, **kwargs)
 
     def call(self, method, url, body=None, **kwargs):
         if body is not None:
