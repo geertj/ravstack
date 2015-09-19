@@ -80,15 +80,11 @@ from __future__ import absolute_import, print_function
 import sys
 import docopt
 
-from . import logging, factory, config, node, proxy, fixup, endpoint
-
-LOG = logging.get_logger()
+from . import logging, factory, config, node, proxy, fixup, endpoint, run
 
 
 def main():
     """Ravstack main entry point."""
-
-    logging.setup_logging()
 
     args = docopt.docopt(__doc__)
     if args['--debug']:
@@ -129,11 +125,4 @@ def main():
 
 
 if __name__ == '__main__':
-    try:
-        main()
-    except Exception as e:
-        LOG.error('Uncaught exception:', exc_info=True)
-        if logging.get_debug() and not logging.get_verbose():
-            raise
-        sys.stdout.write('Error: {!s}\n'.format(e))
-        sys.exit(1)
+    run.run_main(main)

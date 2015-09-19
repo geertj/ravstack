@@ -11,10 +11,12 @@ from __future__ import absolute_import, print_function
 import time
 import logging
 import random
+import json
 
 from requests import Session, HTTPError
 from requests.adapters import HTTPAdapter
 
+LOG = logging.getLogger(__name__)
 
 magic_svm_cpuids = [
     {"index": "0", "value": "0000000768747541444d416369746e65"},
@@ -99,7 +101,6 @@ _default_retries = {409: 10}
 
 def retry_operation(func, timeout=60, retries=None):
     """Retry an operation on various 4xx errors."""
-    log = logging.getLogger(__name__)
     end_time = time.time() + timeout
     tries = {}
     if retries is None:
@@ -115,24 +116,24 @@ def retry_operation(func, timeout=60, retries=None):
             status = e.response.status_code
             if status not in retries:
                 raise
-            log.debug('Retry: {!s}'.format(e))
+            LOG.debug('Retry: {!s}'.format(e))
             tries.setdefault(status, 0)
             tries[status] += 1
             if not 0 < tries[status] < retries[status]:
-                log.error('Max retries reached for status {} ({})'
+                LOG.error('Max retries reached for status {} ({})'
                                 .format(status, retries[status]))
                 raise
-            log.warning('Retry number {} out of {} for status {}.'
+            LOG.warning('Retry number {} out of {} for status {}.'
                             .format(tries[status], retries[status], status))
         except Retry as e:
-            log.warning('Retry requested: {}.'.format(e))
+            LOG.warning('Retry requested: {}.'.format(e))
         else:
             time_spent = time.time() - start_time
-            log.debug('Operation succeeded after {} attempt{} ({:.2f} seconds).'
+            LOG.debug('Operation succeeded after {} attempt{} ({:.2f} seconds).'
                             .format(count, 's' if count > 1 else '', time_spent))
             return ret
         loop_delay = delay + random.random()
-        log.debug('Sleeping for {:.2f} seconds.'.format(loop_delay))
+        LOG.debug('Sleeping for {:.2f} seconds.'.format(loop_delay))
         time.sleep(loop_delay)
     time_spent = time.time() - start_time
     raise RuntimeError('Timeout retrying function `{.__name__}` ({:.2f} seconds).'
@@ -200,3 +201,13 @@ def get_service(vm, port):
     for service in vm.get('suppliedServices', []):
         if service['portRange'] == port:
             return service
+
+
+def get_injected_metadata():
+    """Return the injected metadata from /etc/ravello."""
+    try:
+        with open('/etc/ravello/vm.json') as fin:
+            meta = json.loads(fin.read())
+    except IOError:
+        return {}
+    return meta

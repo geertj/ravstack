@@ -15,7 +15,9 @@ import subprocess
 import textwrap
 import re
 
-from . import util, logging, factory, node
+from . import util, logging, factory, node, run
+
+LOG = logging.get_logger()
 
 
 # proxy-create command
@@ -133,18 +135,17 @@ def parse_virsh_command_line(command):
     raise RuntimeError('unrecognized command: {}'.format(command))
 
 
-def _main():
+def main():
     """Proxy main function."""
     env = factory.get_environ()
-    log = env.logger
 
     command = os.environ.get('SSH_ORIGINAL_COMMAND')
     if command is None:
         raise RuntimeError('This command needs to be run through ssh.')
-    log.debug('New request, command = {}'.format(command))
+    LOG.debug('New request, command = {}'.format(command))
 
     cmdline = parse_virsh_command_line(command)
-    log.info('Parsed command: {}'.format(' '.join(cmdline)))
+    LOG.info('Parsed command: {}'.format(' '.join(cmdline)))
 
     env.args['--cached'] = True
 
@@ -168,18 +169,5 @@ def _main():
         node.do_get_macs(env, cmdline[1], True)
 
 
-def main():
-    """Wrapper for _main()."""
-    try:
-        _main()
-    except Exception as e:
-        log = logging.get_logger()
-        log.error('Uncaught exception:', exc_info=True)
-        if logging.get_debug() and not logging.get_verbose():
-            raise
-        sys.stdout.write('Error: {!s}\n'.format(e))
-        sys.exit(1)
-
-
 if __name__ == '__main__':
-    main()
+    run.run_main(main)

@@ -14,13 +14,42 @@ import logging
 
 from . import util
 
-_log_dir = '/var/log/ravstack'
-_log_name = 'ravstack.log'
+_log_name = __name__.split('.')[0]
+_log_dir = '/var/log/{}'.format(_log_name)
+_log_file = '{}.log'.format(_log_name)
+_log_template = '%(asctime)s %(levelname)s [%(name)s] %(message)s'
+_log_ctx_template = '%(asctime)s %(levelname)s [{}] [%(name)s] %(message)s'
+
+
+def get_logger():
+    """Return the shared logger."""
+    return logging.getLogger(_log_name)
+
+
+class EnvBool(object):
+    """Object is true or not depending on the value of an environment
+    variable."""
+
+    def __init__(self, name, default='0'):
+        self._name = name
+        self._default = default
+
+    def __nonzero__(self):
+        value = os.environ.get(self._name, '')
+        if value in ('n', 'no'):
+            value = '0'
+        elif value in ('y', 'yes'):
+            value = '1'
+        elif not value.isdigit():
+            value = self._default
+        return int(value)
+
+    __bool__ = __nonzero__
 
 
 def get_debug():
     """Return whether debugging is requested."""
-    return os.environ.get('DEBUG', '0') not in ('0', 'n')
+    return EnvBool('DEBUG')
 
 def set_debug(enabled=True):
     """Enable the $DEBUG environment variable."""
@@ -30,7 +59,7 @@ def set_debug(enabled=True):
 
 def get_verbose():
     """Enable whether verbose mode is enabled."""
-    return os.environ.get('VERBOSE', '0') not in ('0', 'n')
+    return EnvBool('VERBOSE')
 
 def set_verbose(enabled=True):
     """Enable the $VERBOSE environment variable."""
@@ -42,47 +71,38 @@ def get_log_file():
     """Return the log file."""
     # First try in VIRTUAL_ENV
     if 'VIRTUAL_ENV' in os.environ:
-        logfile = os.path.join(os.environ['VIRTUAL_ENV'], _log_name)
+        logfile = os.path.join(os.environ['VIRTUAL_ENV'], _log_file)
         if util.can_open(logfile, 'a'):
             return logfile
     # Now try /var/log
-    logfile = os.path.join(_log_dir, _log_name)
+    logfile = os.path.join(_log_dir, _log_file)
     if util.can_open(logfile, 'a'):
         return logfile
 
 
-def get_logger():
-    """Return the shared logger."""
-    return logging.getLogger('ravstack')
+def set_log_context(context):
+    """Set up a logging context."""
+    root = logging.getLogger()
+    template = _log_ctx_template.format(context)
+    for handler in root.handlers:
+        handler.setFormatter(logging.Formatter(template))
 
-
-_template = '%(asctime)s %(levelname)s [%(name)s] %(message)s'
-_ssh_template = '%(asctime)s %(levelname)s [{}] [%(name)s] %(message)s'
 
 def setup_logging():
     """Set up logging."""
     root = logging.getLogger()
     if root.handlers:
         return
-    # If running under SSH, show connection information (for debugging)
-    if os.environ.get('SSH_ORIGINAL_COMMAND'):
-        ssh_conn = os.environ.get('SSH_CONNECTION', '?:?')
-        parts = ssh_conn.split()
-        if parts[0] in ('127.0.0.1', '::1'):
-            parts[0] = ''
-        template = _ssh_template.format(':'.join(parts[:2]))
-    else:
-        template = _template
     # The stderr handler is always present, but only enabled in verbose mode.
     handler = logging.StreamHandler(sys.stderr)
     root.addHandler(handler)
-    handler.setFormatter(logging.Formatter(template))
+    handler.setFormatter(logging.Formatter(_log_template))
     # The logfile handlers is present only if a writable log file is available.
     logfile = get_log_file()
     if logfile:
         handler = logging.FileHandler(logfile)
         root.addHandler(handler)
-        handler.setFormatter(logging.Formatter(template))
+        handler.setFormatter(logging.Formatter(_log_template))
     update_logging_levels()
 
 
