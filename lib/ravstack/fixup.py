@@ -9,9 +9,7 @@
 from __future__ import absolute_import, print_function
 
 import textwrap
-from six.moves.urllib.parse import urlparse
-
-from . import ravello, util
+from . import ravello, util, compat
 
 
 def build_mac_map(nova):
@@ -156,7 +154,7 @@ def update_nova_vnc_url(env, addr, nodename, newaddr):
     output = util.run_ssh(addr, command)
     current = output.rstrip()
     log.debug('Current vnc url = `{}`.'.format(current))
-    parsed = urlparse(current)
+    parsed = compat.urlparse(current)
     if parsed.netloc == newaddr:
         log.debug('Node is up to date.')
         return False
