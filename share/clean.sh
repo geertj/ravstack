@@ -1,7 +1,7 @@
 #!/bin/sh
 
 for home in /root /home/*; do
-    sed -i '/ovirt-engine|ravstack-proxy/!d' $home/.ssh/authorized_keys
+    sed -i '/ovirt\|ravstack/!d' $home/.ssh/authorized_keys
     rm -f $home/.bash_history
 done
 
