@@ -10,8 +10,6 @@ from __future__ import absolute_import, print_function
 
 import os
 import sys
-import locale
-import subprocess
 
 from setuptools import setup
 
@@ -52,20 +50,13 @@ def get_requirements():
     return lines
 
 
-def git_ls_files(dirname):
-    """List files under source control in a directory."""
-    stdout = subprocess.check_output(['git', 'ls-files', 'share'])
-    lines = stdout.decode(locale.getpreferredencoding()).split()
-    return lines
-
-
 if __name__ == '__main__':
     sharedir = os.environ.get('VIRTUAL_ENV', '/usr/share')
     docpath = os.path.join(sharedir, 'doc', 'ravstack')
     setup(
         packages=['ravstack'],
         package_dir={'': 'lib'},
-        data_files=[(docpath, git_ls_files('share'))],
+        data_files=[(docpath, ['README.rst', 'share/ovirt-display-hook.py'])],
         install_requires=get_requirements(),
         entry_points={'console_scripts': ['ravstack = ravstack.main:main']},
         **version_info)
