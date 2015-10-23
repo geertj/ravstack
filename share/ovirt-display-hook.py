@@ -114,7 +114,6 @@ def main():
         entry = cache[port]
         if now - entry['timestamp'] > _cache_ttl:
             fresh = False
-            break
 
     debug('cache state: fresh = {}, complete = {}', fresh, complete)
 
