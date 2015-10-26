@@ -26,6 +26,7 @@ def _redirect_venv(dirname, template):
 
 config_file = _redirect_venv('/etc/{name}', '{name}.conf')
 log_file = _redirect_venv('/var/log/{name}', '{name}.log')
+password_file = _redirect_venv('/var/run/{name}', 'passwords.json')
 
 
 _default_config = [
@@ -105,8 +106,8 @@ def require(config, section, key):
     return cfgsect[key]
 
 
-def dump_defaults(fout):
-    """Dump default configuration."""
+def write_defaults(fout):
+    """Write out the default configuration."""
     current = None
     for section, name, default, required, description, env, arg in _default_config:
         if section != current:
@@ -117,20 +118,3 @@ def dump_defaults(fout):
             env = '$' + env if env else env
             fout.write('# Also specified as {}\n'.format(' or '.join(filter(None, (env, arg)))))
         fout.write('{}{}={}\n\n'.format('' if required else '#', name, default))
-
-
-def do_create(env):
-    """The 'ravstack config-create` command."""
-    if 'VIRTUAL_ENV' in os.environ:
-        cfgname = os.path.join(os.environ['VIRTUAL_ENV'], _config_name)
-    else:
-        st = util.try_stat(_system_config)
-        if st is None:
-            util.create_directory(_system_config)
-        cfgname = os.path.join(_system_config, _config_name)
-    st = util.try_stat(cfgname)
-    if st is not None:
-        return
-    with open(cfgname, 'w') as fout:
-        dump_defaults(fout)
-    print('Created config file `{}`.'.format(cfgname))

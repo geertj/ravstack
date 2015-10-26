@@ -35,8 +35,19 @@ def get_user():
     return user
 
 
+def create_file(filename, mode=0o644):
+    """Create a new empty file if it doesn't exist already."""
+    try:
+        fd = os.open(filename, os.O_CREAT|os.O_EXCL, mode)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+    else:
+        os.close(fd)
+
+
 def create_directory(dirname, mode=0o755):
-    """Create a new directory."""
+    """Create a new directory if it doesn't exist already."""
     try:
         os.mkdir(dirname, mode)
     except OSError as e:
@@ -173,3 +184,15 @@ def selinux_enabled():
         return False
     output = output.decode(encoding).strip().lower()
     return output in ('permissive', 'enforcing')
+
+
+def get_cloudinit_instance():
+    """Return the current CloudInit instance ID."""
+    try:
+        target = os.readlink('/var/lib/cloud/instance')
+    except OSError as e:
+        if e.errno != errno.ENOENT:
+            raise
+        return
+    path, instance = os.path.split(target)
+    return instance

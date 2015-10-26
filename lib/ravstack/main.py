@@ -9,7 +9,7 @@
 """Ravello Ironic command-line utility.
 
 Usage:
-  ravstack [options] config-create
+  ravstack [options] setup
   ravstack [options] proxy-create
   ravstack [options] node-create [-c <cpus>] [-m <memory>]
                                 [-D <disk>] [-n <count>]
@@ -27,7 +27,7 @@ Usage:
   ravstack --help
 
 Command help:
-  config-create         Create ravstack configuration file.
+  setup                 Create ravstack directories and config file.
   proxy-create          Create SSH -> Ravello API proxy.
   node-create           Create a new node.
   node-dump             Dump node definitions to specified file.
@@ -79,7 +79,7 @@ from __future__ import absolute_import, print_function
 
 import docopt
 
-from . import logging, factory, config, node, proxy, fixup, endpoint, run
+from . import logging, factory, setup, node, proxy, fixup, endpoint, run
 
 
 def main():
@@ -93,8 +93,8 @@ def main():
 
     env = factory.get_environ(args)
 
-    if args['config-create']:
-        config.do_create(env)
+    if args['setup']:
+        setup.do_setup(env)
     elif args['proxy-create']:
         proxy.do_create(env)
     elif args['node-create']:
