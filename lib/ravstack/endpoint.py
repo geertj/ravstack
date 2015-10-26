@@ -14,8 +14,8 @@ import errno
 import socket
 import select
 import struct
-import httplib
 
+from six.moves import http_client
 from . import logging, args
 
 LOG = logging.get_logger()
@@ -36,7 +36,7 @@ def get_public_ip():
     # This uses ipify.org. See www.ipify.org. This is a free service running
     # open source code deployed on Heroku. ON the web site the author says he
     # intends to keep it around for years to come.
-    conn = httplib.HTTPConnection('api.ipify.org', 80)
+    conn = http_client.HTTPConnection('api.ipify.org', 80)
     try:
         conn.request('GET', '/')
         resp = conn.getresponse()
