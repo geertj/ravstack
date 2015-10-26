@@ -1,0 +1,12 @@
+[Unit]
+Description=Warmup oVirt application server
+After=httpd.service ovirt-engine.service
+
+[Service]
+Type=simple
+ExecStart=/bin/curl -svkf -o /dev/null https://localhost/ovirt-engine/webadmin/
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
