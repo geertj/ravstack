@@ -12,11 +12,9 @@ import os
 import sys
 import logging
 
-from . import util
+from . import util, config
 
 _log_name = __name__.split('.')[0]
-_log_dir = '/var/log/{}'.format(_log_name)
-_log_file = '{}.log'.format(_log_name)
 _log_template = '%(asctime)s %(levelname)s [%(name)s] %(message)s'
 _log_ctx_template = '%(asctime)s %(levelname)s [{}] [%(name)s] %(message)s'
 
@@ -67,19 +65,6 @@ def set_verbose(enabled=True):
     update_logging_levels()
 
 
-def get_log_file():
-    """Return the log file."""
-    # First try in VIRTUAL_ENV
-    if 'VIRTUAL_ENV' in os.environ:
-        logfile = os.path.join(os.environ['VIRTUAL_ENV'], _log_file)
-        if util.can_open(logfile, 'a'):
-            return logfile
-    # Now try /var/log
-    logfile = os.path.join(_log_dir, _log_file)
-    if util.can_open(logfile, 'a'):
-        return logfile
-
-
 def set_log_context(context):
     """Set up a logging context."""
     root = logging.getLogger()
@@ -98,7 +83,7 @@ def setup_logging():
     root.addHandler(handler)
     handler.setFormatter(logging.Formatter(_log_template))
     # The logfile handlers is present only if a writable log file is available.
-    logfile = get_log_file()
+    logfile = config.log_file
     if logfile:
         handler = logging.FileHandler(logfile)
         root.addHandler(handler)

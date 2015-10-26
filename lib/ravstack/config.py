@@ -14,8 +14,19 @@ from configparser import ConfigParser, ExtendedInterpolation
 from . import util
 
 
-_config_name = 'ravstack.conf'
-_system_config = '/etc/ravstack'
+_pkg_name = __name__.split('.')[0]
+
+def _redirect_venv(dirname, template):
+    fname = template.format(name=_pkg_name)
+    if 'VIRTUAL_ENV' in os.environ:
+        dirname = os.environ['VIRTUAL_ENV']
+    else:
+        dirname = dirname.format(name=_pkg_name)
+    return os.path.join(dirname, fname)
+
+config_file = _redirect_venv('/etc/{name}', '{name}.conf')
+log_file = _redirect_venv('/var/log/{name}', '{name}.log')
+
 
 _default_config = [
     # section, name, default, required, description, env, arg
@@ -56,11 +67,8 @@ def parse_config():
         if section not in config:
             config.add_section(section)
         config[section][name] = default
-    # Read in the config files.
-    prefixes = [_system_config]
-    if 'VIRTUAL_ENV' in os.environ:
-        prefixes.append(os.environ['VIRTUAL_ENV'])
-    config.read((os.path.join(prefix, _config_name) for prefix in prefixes))
+    # Read in the config file.
+    config.read([config_file])
     # Read from environment variables
     for section, name, default, req, desc, env, arg in _default_config:
         if not env or env not in os.environ:
