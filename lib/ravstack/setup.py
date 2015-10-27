@@ -27,7 +27,7 @@ def do_setup(env):
         util.create_directory(cfgdir)
     st = util.try_stat(cfgname)
     if st is None:
-        util.create_file(cfgname, 0o600)
+        util.create_file(cfgname)
         with open(cfgname, 'w') as fout:
             CONF.write_defaults(fout)
         print('Created config file `{}`.'.format(cfgname))
@@ -40,7 +40,7 @@ def do_setup(env):
         util.create_directory(logdir)
     st = util.try_stat(logname)
     if st is None:
-        util.create_file(logname, 0o600)
+        util.create_file(logname)
         print('Created log file `{}`.'.format(logname))
 
     # Create runtime directory and per-instance unique password.
@@ -48,7 +48,7 @@ def do_setup(env):
     rtdir, _ = os.path.split(pwname)
     st = util.try_stat(rtdir)
     if st is None:
-        util.create_directory(rtdir, 0o700)
+        util.create_directory(rtdir)
         print('Created runtime directory `{}`.'.format(rtdir))
     instance = util.get_cloudinit_instance() or 'unset'
     if instance:

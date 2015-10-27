@@ -244,3 +244,16 @@ def get_ravello_metadata():
     except IOError:
         return {}
     return meta
+
+
+def constant_time_strcmp(s1, s2):
+    """String comparison that runs in constant time.
+
+    Returns zero if the strings are equal, nonzero otherwise.
+    """
+    if len(s1) != len(s2):
+        return 1
+    result = 0
+    for x, y in zip(s1, s2):
+        result |= ord(x) ^ ord(y)
+    return result
