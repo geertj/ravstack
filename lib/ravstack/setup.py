@@ -12,14 +12,15 @@ import os
 import json
 import binascii
 
-from . import util, config
+from . import util, defaults
+from .runtime import CONF
 
 
 def do_setup(env):
     """The 'ravstack setup` command."""
 
     # Create default config file and directory.
-    cfgname = config.config_file
+    cfgname = defaults.config_file
     cfgdir, _ = os.path.split(cfgname)
     st = util.try_stat(cfgdir)
     if st is None:
@@ -28,11 +29,11 @@ def do_setup(env):
     if st is None:
         util.create_file(cfgname, 0o600)
         with open(cfgname, 'w') as fout:
-            config.write_defaults(fout)
+            CONF.write_defaults(fout)
         print('Created config file `{}`.'.format(cfgname))
 
     # Create log file and directory.
-    logname = config.log_file
+    logname = defaults.log_file
     logdir, _ = os.path.split(logname)
     st = util.try_stat(logdir)
     if st is None:
@@ -43,7 +44,7 @@ def do_setup(env):
         print('Created log file `{}`.'.format(logname))
 
     # Create runtime directory and per-instance unique password.
-    pwname = config.password_file
+    pwname = defaults.password_file
     rtdir, _ = os.path.split(pwname)
     st = util.try_stat(rtdir)
     if st is None:

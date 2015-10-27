@@ -46,7 +46,8 @@ Command help:
 
 Options:
   -d, --debug           Enable debugging.
-  -v, --verbose         Be verbose (shows logging output on stdout)
+  -v, --verbose         Be verbose.
+  --log-stderr          Show logs on standard error.
   -u <username>, --username=<username>
                         Ravello API username.
   -p <password>, --password=<password>
@@ -79,17 +80,17 @@ from __future__ import absolute_import, print_function
 
 import docopt
 
-from . import logging, factory, setup, node, proxy, fixup, endpoint, run
+from . import logging, factory, setup, node, proxy, fixup, endpoint, runtime
+from .runtime import CONF
 
 
 def main():
     """Ravstack main entry point."""
 
     args = docopt.docopt(__doc__)
-    if args['--debug']:
-        logging.set_debug()
-    if args['--verbose']:
-        logging.set_verbose()
+    CONF.update_from_args(args)
+    CONF.update_to_env()
+    runtime.setup_logging()  # logging configuration might have changed
 
     env = factory.get_environ(args)
 
@@ -123,5 +124,10 @@ def main():
         endpoint.do_resolve(env, args['<port>'])
 
 
+def run_main():
+    """Setuptools entry point."""
+    runtime.run_main(main)
+
+
 if __name__ == '__main__':
-    run.run_main(main)
+    run_main()

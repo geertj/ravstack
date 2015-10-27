@@ -11,7 +11,8 @@ from __future__ import absolute_import, print_function
 import json
 import copy
 
-from . import ravello, config, logging, util
+from . import ravello, util
+from .runtime import LOG, CONF
 
 
 class Environment(object):
@@ -43,25 +44,23 @@ def update_from_ravello_config(cfg):
 
 def get_ravello_client(env):
     """Return a API client connection."""
-    username = config.require(env.config, 'ravello', 'username')
-    password = config.require(env.config, 'ravello', 'password')
+    username = env.config.require('ravello', 'username')
+    password = env.config.require('ravello', 'password')
     client = ravello.RavelloClient()
     try:
         client.login(username, password)
     except ravello.HTTPError:
-        if logging.get_debug():
-            raise
+        LOG.error('login failed', exc_info=True)
         raise RuntimeError('login failed with provided credentials')
-    log = logging.get_logger()
-    log.debug('logged in as `{}`'.format(username))
-    log.debug('member of organization `{}`'.format(client.user_info
+    LOG.debug('logged in as `{}`'.format(username))
+    LOG.debug('member of organization `{}`'.format(client.user_info
                         .get('organizationProfile', {}).get('organizationName', '')))
     return client
 
 
 def get_ravello_application(env):
     """Return the Ravello application we're working in."""
-    name = config.require(env.config, 'ravello', 'application')
+    name = env.config.require('ravello', 'application')
     apps = env.client.call('POST', '/applications/filter', ravello.simple_filter(name=name))
     if len(apps) == 0:
         raise RuntimeError('Application `{}` not found'.format(name))
@@ -99,7 +98,7 @@ def get_nodes(app):
 
 def get_pxe_iso(env):
     """Return the disk image for the PXE boot iso."""
-    name = config.require(env.config, 'ravello', 'pxe_iso')
+    name = env.config.require('ravello', 'pxe_iso')
     images = env.client.call('GET', '/diskImages')
     for image in images:
         if image['name'] == name:
@@ -136,21 +135,12 @@ def get_nova_client(session):
     return client.Client('2', session=session)
 
 
-def get_environ(args=None):
+def get_environ(args):
     """Construct an "environment" that provides the common requirements used by
     the different commands."""
-    if args is None:
-        args = {}
     env = Environment()
-    env.logger = logging.get_logger()
-    cfg = config.parse_config()
-    config.update_from_args(cfg, args)
-    update_from_ravello_config(cfg)
-    if cfg['DEFAULT'].getboolean('debug'):
-        logging.set_debug()
-    if cfg['DEFAULT'].getboolean('verbose'):
-        logging.set_verbose()
-    env.config = cfg
+    env.logger = LOG
+    env.config = CONF
     env.args = args
     env.lazy_attr('client', lambda: get_ravello_client(env))
     env.lazy_attr('application', lambda: get_ravello_application(env))

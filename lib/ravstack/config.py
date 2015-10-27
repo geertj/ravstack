@@ -9,112 +9,95 @@
 from __future__ import absolute_import, print_function
 
 import os
+from collections import namedtuple
 from configparser import ConfigParser, ExtendedInterpolation
 
-from . import util
 
+CI = namedtuple('ConfigItem', ('section', 'name', 'default',
+                               'required', 'description', 'env', 'arg'))
 
-_pkg_name = __name__.split('.')[0]
+class Config(ConfigParser):
+    """Configuration object."""
 
-def _redirect_venv(dirname, template):
-    fname = template.format(name=_pkg_name)
-    if 'VIRTUAL_ENV' in os.environ:
-        dirname = os.environ['VIRTUAL_ENV']
-    else:
-        dirname = dirname.format(name=_pkg_name)
-    return os.path.join(dirname, fname)
+    def __init__(self):
+        super(Config, self).__init__(interpolation=ExtendedInterpolation())
+        self.schema = []
 
-config_file = _redirect_venv('/etc/{name}', '{name}.conf')
-log_file = _redirect_venv('/var/log/{name}', '{name}.log')
-password_file = _redirect_venv('/var/run/{name}', 'passwords.json')
+    def set_schema(self, schema):
+        """Splice in default configuration items from *defaults*."""
+        for ci in schema:
+            if not ci.default:
+                continue
+            if ci.section not in self:
+                self.add_section(ci.section)
+            if ci.name not in self[ci.section]:
+                self[ci.section][ci.name] = ci.default
+        self.schema = schema
 
+    def read_file(self, config_file):
+        """Read settings from *config_file*."""
+        super(Config, self).read(config_file)
 
-_default_config = [
-    # section, name, default, required, description, env, arg
-    ('DEFAULT', 'debug', 'False', False, 'Enable debugging.', 'DEBUG', '--debug'),
-    ('DEFAULT', 'verbose', 'False', False,
-            'Be verbose (shows logging on stdout).', 'VERBOSE', '--verbose'),
-    ('ravello', 'username', '<None>', True,
-            'Ravello API username.', 'RAVELLO_USERNAME', '--username'),
-    ('ravello', 'password', '<None>', True,
-            'Ravello API password.', 'RAVELLO_PASSWORD', '--password'),
-    ('ravello', 'application', '<None>', False,
-            'Ravello application name.', 'RAVELLO_APPLICATION', '--application'),
-    ('ravello', 'pxe_iso', 'ipxe.iso', False,
-            'Name of PXE boot ISO image.', None, '--pxe-iso'),
-    ('ravello', 'min_runtime', '120', False,
-            'Minimum application runtime (in minutes).', None, None),
-    ('proxy', 'key_name', 'id_ravstack', False, 'API proxy keypair name.', None, None),
-    ('proxy', 'proxy_name', 'ravstack-proxy', False, 'API proxy script.', None, None),
-    ('tripleo', 'nodes_file', '~/instackenv.json', False,
-            'File name containing node definitions.', None, None),
-    ('tripleo', 'undercloud_env', '~/stackrc', False, 'Undercloud rc file.', None, None),
-    ('tripleo', 'overcloud_env', '~/overcloudrc', False, 'Overcloud rc file.', None, None),
-    ('tripleo', 'controller_name', 'controller', False,
-            'Name uniquely identifying a controller node.', None, None),
-    ('tripleo', 'compute_name', 'novacompute', False,
-            'Name uniquely identifying a Nova compute node.', None, None),
-    ('tripleo', 'ssh_user', 'heat-admin', False,
-            'Name for ssh user to login to nodes.', None, None),
-]
+    def update_from_args(self, args):
+        """Update the configuration object from command line arguments."""
+        for ci in self.schema:
+            if args.get(ci.arg) in (None, False):
+                continue
+            if ci.section not in self:
+                self.add_section(ci.section)
+            self[ci.section][ci.name] = str(args[ci.arg])
 
+    def update_from_env(self):
+        """Update the configuration object from environment variables."""
+        for ci in self.schema:
+            if not ci.env or ci.env not in os.environ:
+                continue
+            if ci.section not in self:
+                self.add_section(ci.section)
+            self[ci.section][ci.name] = os.environ[ci.env]
 
-def parse_config():
-    """Parse configuration files."""
-    config = ConfigParser(default_section='__default__',
-                          interpolation=ExtendedInterpolation())
-    # First splice in defaults.
-    for section, name, default, req, desc, env, arg in _default_config:
-        if section not in config:
-            config.add_section(section)
-        config[section][name] = default
-    # Read in the config file.
-    config.read([config_file])
-    # Read from environment variables
-    for section, name, default, req, desc, env, arg in _default_config:
-        if not env or env not in os.environ:
-            continue
-        config[section][name] = os.environ[env]
-    return config
+    def update_to_env(self):
+        """Update the environment with update config items."""
+        for ci in self.schema:
+            if not ci.env:
+                continue
+            value = self.get(ci.section, ci.name, fallback='<None>')
+            if value != os.environ.get(ci.env, '<None>'):
+                os.environ[ci.env] = value
 
+    def require(self, section, key):
+        """Require section/key to be part of config, raise otherwise."""
+        if section not in self:
+            raise RuntimeError('No such configuration section: {}'.format(section))
+        cfgsect = self[section]
+        if key not in cfgsect or cfgsect[key] == '<None>':
+            message = 'Config `[{}]{}` not set.'.format(section, key)
+            locations = []
+            for item in self.schema:
+                if item[0] == section and item[1] == key:
+                    if item[-2]:
+                        locations.append('$' + item[-2])
+                    if item[-1]:
+                        locations.append(item[-1])
+                    break
+            if locations:
+                message += ' Also available as {}.'.format(' or '.join((locations)))
+            raise RuntimeError(message)
+        return cfgsect[key]
 
-def update_from_args(config, args):
-    """Update *config* with values specified in *args*."""
-    for section, name, default, req, desc, env, arg in _default_config:
-        if args.get(arg) not in (None, False):
-            config[section][name] = str(args[arg])
-
-
-def require(config, section, key):
-    """Require section/key to be part of config, raise otherwise."""
-    if section not in config:
-        raise RuntimeError('No such configuration section: {}'.format(section))
-    cfgsect = config[section]
-    if key not in cfgsect or cfgsect[key] == '<None>':
-        message = 'Config `[{}]{}` not set.'.format(section, key)
-        locations = []
-        for item in _default_config:
-            if item[0] == section and item[1] == key:
-                if item[-2]:
-                    locations.append('$' + item[-2])
-                if item[-1]:
-                    locations.append(item[-1])
-                break
-        if locations:
-            message += ' Also available as {}.'.format(' or '.join((locations)))
-        raise RuntimeError(message)
-    return cfgsect[key]
-
-
-def write_defaults(fout):
-    """Write out the default configuration."""
-    current = None
-    for section, name, default, required, description, env, arg in _default_config:
-        if section != current:
-            fout.write('[{}]\n'.format(section))
-            current = section
-        fout.write('# {}{}\n'.format(description, ' [required]' if required else ''))
-        if env or arg:
-            env = '$' + env if env else env
-            fout.write('# Also specified as {}\n'.format(' or '.join(filter(None, (env, arg)))))
-        fout.write('{}{}={}\n\n'.format('' if required else '#', name, default))
+    def write_defaults(self, fout):
+        """Write out the default configuration."""
+        section = None
+        for ci in self.schema:
+            if ci.section != section:
+                fout.write('[{}]\n'.format(ci.section))
+                section = ci.section
+            fout.write('# {}{}\n'.format(ci.description, ' [required]' if ci.required else ''))
+            altlocs = []
+            if ci.env:
+                altlocs.append('$' + ci.env)
+            if ci.arg:
+                altlocs.append(ci.arg)
+            if altlocs:
+                fout.write('# Also specified as {}\n'.format(' or '.join(altlocs)))
+            fout.write('{}{}={}\n\n'.format('' if ci.required else '#', ci.name, ci.default))

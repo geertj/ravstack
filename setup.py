@@ -55,5 +55,5 @@ if __name__ == '__main__':
         packages=['ravstack'],
         package_dir={'': 'lib'},
         install_requires=get_requirements(),
-        entry_points={'console_scripts': ['ravstack = ravstack.main:main']},
+        entry_points={'console_scripts': ['ravstack = ravstack.main:run_main']},
         **version_info)

@@ -9,9 +9,8 @@
 from __future__ import absolute_import, print_function
 
 import sys
-from . import logging, ravello, run
-
-LOG = logging.get_logger()
+from . import logging, ravello, runtime
+from .runtime import LOG
 
 
 def main():
@@ -50,4 +49,4 @@ def main():
 
 
 if __name__ == '__main__':
-    run.run_main(main)
+    runtime.run_main(main)

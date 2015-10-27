@@ -201,13 +201,3 @@ def get_service(vm, port):
     for service in vm.get('suppliedServices', []):
         if service['portRange'] == port:
             return service
-
-
-def get_injected_metadata():
-    """Return the injected metadata from /etc/ravello."""
-    try:
-        with open('/etc/ravello/vm.json') as fin:
-            meta = json.loads(fin.read())
-    except IOError:
-        return {}
-    return meta

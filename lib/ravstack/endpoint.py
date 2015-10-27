@@ -14,11 +14,12 @@ import errno
 import socket
 import select
 import struct
+import logging
 
 from six.moves import http_client
-from . import logging, args
+from . import args
 
-LOG = logging.get_logger()
+LOG = logging.getLogger(__name__.split('.')[0])
 
 _default_base = 10000
 _default_nports = 50
@@ -40,7 +41,7 @@ def get_public_ip():
     try:
         conn.request('GET', '/')
         resp = conn.getresponse()
-        if resp.status != httplib.OK:
+        if resp.status != http_client.OK:
             raise RuntimeError('api.ipify.org status {}'.format(resp.status))
         body = resp.read()
     finally:

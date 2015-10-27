@@ -14,8 +14,46 @@ import errno
 import socket
 import struct
 import subprocess
+import functools
 import locale
+import json
 import re
+
+
+_memodata = {}
+
+def memoize(func):
+    """Memoizes a function."""
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        name = getattr(func, '__qualname__', func.__name__)
+        strargs = map(repr, args) + map(lambda x: '{0}={1!r}'.format(x), kwargs.items())
+        key = '{}({})'.format(name, ', '.join(strargs))
+        if key not in _memodata:
+            _memodata[key] = func(*args, **kwargs)
+        return _memodata[key]
+    return wrapped
+
+
+class EnvInt(object):
+    """Proxy to a bool/int stored in an environment variable."""
+
+    def __init__(self, name, default='0'):
+        self._name = name
+        self._default = default
+
+    def __int__(self):
+        value = os.environ.get(self._name, '').lower()
+        if value in ('n', 'no', 'f', 'false'):
+            value = '0'
+        elif value in ('y', 'yes', 't', 'true'):
+            value = '1'
+        elif not value.isdigit():
+            value = self._default
+        return int(value)
+
+    __nonzero__ = lambda self: bool(int(self))
+    __bool__ = __nonzero__
 
 
 def get_homedir():
@@ -196,3 +234,13 @@ def get_cloudinit_instance():
         return
     path, instance = os.path.split(target)
     return instance
+
+
+def get_ravello_metadata():
+    """Return the injected metadata from /etc/ravello."""
+    try:
+        with open('/etc/ravello/vm.json') as fin:
+            meta = json.loads(fin.read())
+    except IOError:
+        return {}
+    return meta

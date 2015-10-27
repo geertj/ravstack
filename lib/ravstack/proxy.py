@@ -14,9 +14,8 @@ import subprocess
 import textwrap
 import re
 
-from . import util, logging, factory, node, run
-
-LOG = logging.get_logger()
+from . import util, logging, factory, node, runtime
+from .runtime import LOG, CONF
 
 
 # proxy-create command
@@ -136,17 +135,23 @@ def parse_virsh_command_line(command):
 
 def main():
     """Proxy main function."""
-    env = factory.get_environ()
+    CONF.update_from_args({'--cached': True})
 
-    command = os.environ.get('SSH_ORIGINAL_COMMAND')
-    if command is None:
+    # Make sure we are running under SSH.
+    conn = os.environ.get('SSH_CONNECTION', '?:?')
+    if conn is None:
         raise RuntimeError('This command needs to be run through ssh.')
-    LOG.debug('New request, command = {}'.format(command))
 
+    # Add connection info the the logs.
+    cp = conn.split()
+    context = '{}:{}'.format('' if cp[0] in ('127.0.0.1', '::1') else cp[0], cp[1])
+    runtime.setup_logging(context)
+
+    # Parse the original command to understand what we need to do.
+    command = os.environ.get('SSH_ORIGINAL_COMMAND')
+    LOG.debug('New request, command = {}'.format(command))
     cmdline = parse_virsh_command_line(command)
     LOG.info('Parsed command: {}'.format(' '.join(cmdline)))
-
-    env.args['--cached'] = True
 
     if cmdline[0] == 'true':
         pass
@@ -169,4 +174,4 @@ def main():
 
 
 if __name__ == '__main__':
-    run.run_main(main)
+    runtime.run_main(main)
