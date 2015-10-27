@@ -1,0 +1,11 @@
+[Unit]
+Description=Per-instance ravstack setup.
+After=cloud-init.service
+
+[Service]
+Type=simple
+RemainAfterExit=true
+ExecStart=/bin/ravstack setup
+
+[Install]
+WantedBy=multi-user.target
