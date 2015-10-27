@@ -80,7 +80,7 @@ from __future__ import absolute_import, print_function
 
 import docopt
 
-from . import logging, factory, setup, node, proxy, fixup, endpoint, runtime
+from . import factory, setup, node, proxy, fixup, endpoint, runtime
 from .runtime import CONF
 
 

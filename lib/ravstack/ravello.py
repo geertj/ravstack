@@ -11,7 +11,6 @@ from __future__ import absolute_import, print_function
 import time
 import logging
 import random
-import json
 
 from requests import Session, HTTPError
 from requests.adapters import HTTPAdapter

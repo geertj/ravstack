@@ -14,7 +14,7 @@ import subprocess
 import textwrap
 import re
 
-from . import util, logging, factory, node, runtime
+from . import util, factory, node, runtime
 from .runtime import LOG, CONF
 
 
@@ -135,7 +135,8 @@ def parse_virsh_command_line(command):
 
 def main():
     """Proxy main function."""
-    CONF.update_from_args({'--cached': True})
+    args = {'--cached': True}
+    CONF.update_from_args(args)
 
     # Make sure we are running under SSH.
     conn = os.environ.get('SSH_CONNECTION', '?:?')
@@ -152,6 +153,8 @@ def main():
     LOG.debug('New request, command = {}'.format(command))
     cmdline = parse_virsh_command_line(command)
     LOG.info('Parsed command: {}'.format(' '.join(cmdline)))
+
+    env = factory.get_environ(args)
 
     if cmdline[0] == 'true':
         pass
