@@ -10,6 +10,7 @@ rm -rf /var/lib/cloud/instances/*
 find /var/lib/cloud -type f | xargs rm -f
 
 rm -f /var/lib/dhclient/*.lease
+rm -f /var/run/ravstack/*
 
 cp -f /dev/null /var/run/utmp
 cp -f /dev/null /var/log/btmp
