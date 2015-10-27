@@ -16,8 +16,8 @@ from setuptools import setup
 
 version_info = {
     'name': 'ravstack',
-    'version': '1.0.4',
-    'description': 'Run OpenStack on Ravello Systems.',
+    'version': '1.1.0',
+    'description': 'Run OpenStack and oVirt on Ravello Systems.',
     'author': 'Geert Jansen',
     'author_email': 'geertj@gmail.com',
     'url': 'https://github.com/geertj/ravstack',
